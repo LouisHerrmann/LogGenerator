@@ -1,8 +1,8 @@
 import random
 from collections import defaultdict
 import pandas as pd
-
 import networkx as nx
+from replayer import *
 
 class MergedTraceGraph:
     def __init__(self, shared_act_dict):
@@ -212,35 +212,25 @@ def convert_to_ocel(merged_graph):
 
 
 if __name__ == '__main__':
-    o1 = [["Shared_po", "in", "pa", "Shared_co"], ["Shared_po", "in", "sr", "pa", "Shared_co"]]
-    i1 = [["Shared_po", "pi", "Shared_st", "Shared_en", "Shared_co"]]
-    r1 = [["Shared_st", "Shared_en"]]
 
-    traces = {"o1": o1, "i1": i1, "r1": r1}
+    graph = """digraph { 0[label="BPMN_START"]; 2[label="BPMN_TASK(CreateCustomerInvoice):135138"]; 3[label="BPMN_EXCLUSIVE_CHOICE"]; 4[label="BPMN_EXCLUSIVE_CHOICE"]; 5[label="BPMN_TASK(SendOverdueNotice):78174"]; 6[label="BPMN_TASK(ClearCustomerInvoice):135138"]; 1[label="BPMN_END"]; 7[label="BPMN_START"]; 9[label="BPMN_TASK(CreateDelivery):135138"]; 10[label="BPMN_TASK(ExecutePicking):135138"]; 11[label="BPMN_TASK(InsufficientMaterialFound):28381"]; 12[label="BPMN_TASK(PostGoodsIssue):135138"]; 8[label="BPMN_END"]; 13[label="BPMN_START"]; 15[label="BPMN_TASK(PostGoodsReceipt):135138"]; 16[label="BPMN_TASK(ReceiveVendorInvoice):135138"]; 14[label="BPMN_END"]; 17[label="BPMN_START"]; 19[label="BPMN_TASK(CreatePurchaseOrder):135138"]; 20[label="BPMN_TASK(ApprovePurchaseOrder):130896"]; 21[label="BPMN_TASK(SendPurchaseOrder):130896"]; 22[label="BPMN_TASK(SendDeliveryOverdueNotice):28381"]; 18[label="BPMN_END"]; 23[label="BPMN_START"]; 25[label="BPMN_TASK(CreateQuotation):135138"]; 26[label="BPMN_TASK(ApproveQuotation):137966"]; 27[label="BPMN_TASK(CreateSalesOrder):135138"]; 24[label="BPMN_END"]; 28[label="BPMN_START"]; 30[label="BPMN_EXCLUSIVE_CHOICE"]; 31[label="BPMN_EXCLUSIVE_CHOICE"]; 32[label="BPMN_TASK(RemoveCreditBlock):48278"]; 33[label="BPMN_TASK(RemoveDeliveryBlock):46864"]; 29[label="BPMN_END"]; 34[label="BPMN_START"]; 35[label="BPMN_END"]; 36[label="BPMN_START"]; 37[label="BPMN_END"]; 38[label="BPMN_START"]; 40[label="BPMN_EXCLUSIVE_CHOICE"]; 42[label="BPMN_TASK(ReceiveOverdueNotice):44036"]; 41[label="BPMN_EXCLUSIVE_CHOICE"]; 43[label="BPMN_TASK(SetPaymentBlock):42723"]; 44[label="BPMN_TASK(RemovePaymentBlock):42723"]; 45[label="BPMN_TASK(ClearVendorInvoice):135138"]; 39[label="BPMN_END"]; 0 -> 2 [object=0, label=72720]; 2 -> 3 [object=0, label=72720]; 3 -> 4 [object=0, label=36360]; 3 -> 5 [object=0, label=36360]; 5 -> 4 [object=0, label=36360]; 4 -> 6 [object=0, label=72720]; 6 -> 1 [object=0, label=72720]; 7 -> 9 [object=1, label=117059]; 9 -> 10 [object=1, label=117059]; 10 -> 11 [object=1, label=117059]; 11 -> 12 [object=1, label=117059]; 12 -> 2 [object=1, label=117059]; 2 -> 8 [object=1, label=117059]; 13 -> 15 [object=2, label=14544]; 15 -> 10 [object=2, label=14544]; 10 -> 11 [object=2, label=14544]; 11 -> 12 [object=2, label=14544]; 12 -> 16 [object=2, label=14544]; 16 -> 14 [object=2, label=14544]; 17 -> 19 [object=3, label=14544]; 19 -> 20 [object=3, label=14544]; 20 -> 21 [object=3, label=14544]; 21 -> 22 [object=3, label=14544]; 22 -> 15 [object=3, label=14544]; 15 -> 16 [object=3, label=14544]; 16 -> 18 [object=3, label=14544]; 23 -> 25 [object=4, label=14544]; 25 -> 26 [object=4, label=14544]; 26 -> 27 [object=4, label=14544]; 27 -> 24 [object=4, label=14544]; 28 -> 27 [object=5, label=14544]; 27 -> 30 [object=5, label=14544]; 30 -> 31 [object=5, label=7272]; 30 -> 32 [object=5, label=7272]; 32 -> 33 [object=5, label=7272]; 33 -> 31 [object=5, label=7272]; 31 -> 9 [object=5, label=14544]; 9 -> 2 [object=5, label=14544]; 2 -> 29 [object=5, label=14544]; 34 -> 27 [object=6, label=14544]; 27 -> 9 [object=6, label=14544]; 9 -> 2 [object=6, label=14544]; 2 -> 35 [object=6, label=14544]; 36 -> 19 [object=7, label=4040]; 19 -> 37 [object=7, label=4040]; 38 -> 16 [object=8, label=72922]; 16 -> 40 [object=8, label=72922]; 40 -> 42 [object=8, label=36057]; 42 -> 41 [object=8, label=36057]; 40 -> 43 [object=8, label=36865]; 43 -> 44 [object=8, label=36865]; 44 -> 41 [object=8, label=36865]; 41 -> 45 [object=8, label=72922]; 45 -> 39 [object=8, label=72922];}"""
 
-    shared_act_dict = {"Shared_po": {"o1", "i1"}, "Shared_co": {"o1", "i1"}, "Shared_st": {"i1", "r1"},
-                       "Shared_en": {"i1", "r1"}}
+    G, object_types = create_graph(graph)
+    graphs = {}
+    traces = {}
+    for ot in object_types:
+        graph = flatten_graph(G, ot)
+        graphs[ot] = graph
 
-    graphs, traces = combine_object_types(traces, max_iterations=10)
-    print(graphs)
+        simulation = Simulation(graph, max_trace_length=20, max_cycles=2)
+        simulation.start_simulation()
+        traces[ot] = simulation.get_activity_sequence_representation()
 
-    for graph in graphs:
-        print(convert_to_ocel(graph))
-
-    o1 = ["CreateQuotation ApproveQuotation CreateSalesOrder".split(" ")]
-    i1 = ["CreateSalesOrder RemoveDeliveryBlock RemoveCreditBlock CreateDelivery CreateCustomerInvoice".split(" "), "CreateSalesOrder CreateDelivery CreateCustomerInvoice".split(" ")]
-    r1 = ["CreateSalesOrder ChangeSalesOrderItem CreateDelivery CreateCustomerInvoice".split(" "), "CreateSalesOrder CreateDelivery CreateCustomerInvoice".split(" ")]
-    w1 = ["CreateDelivery ExecutePicking InsufficientMaterialFound PostGoodsIssue CreateCustomerInvoice".split(" "), "CreateDelivery ExecutePicking PostGoodsIssue CreateCustomerInvoice".split(" ")]
-
-    traces = {"o1": o1, "i1": i1, "r1": r1, "w1": w1}
-
-    shared_act_dict = {"Shared_po": {"o1", "i1"}, "Shared_co": {"o1", "i1"}, "Shared_st": {"i1", "r1"},
-                       "Shared_en": {"i1", "r1"}}
-
-    graphs, traces = combine_object_types(traces, max_iterations=10)
+    graphs, traces = combine_object_types(traces, max_iterations=50)
 
     dataframes = []
 
     for graph in graphs:
         dataframes.append(convert_to_ocel(graph))
 
+    print(dataframes)
