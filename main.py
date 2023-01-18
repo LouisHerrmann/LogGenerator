@@ -3,6 +3,7 @@ from collections import defaultdict
 import pandas as pd
 import networkx as nx
 from replayer import *
+from datetime import timedelta, datetime
 
 
 class MergedTraceGraph:
@@ -116,6 +117,18 @@ class MergedTraceGraph:
 
     def number_of_unmatched_events(self):
         return len([k for k, v in self.missing_objects.items() if v != set()])
+
+    def convert_to_dataframe(self):
+        topological_ordering = list(nx.topological_sort(self.graph))
+        rows = []
+        for node in topological_ordering:
+            row = {"activity": self.get_node_activity(node)}
+            associated_objects = list(self.get_node_associated_objects(node))
+            for object_type in self.get_node_related_objects(node):
+                row[object_type] = [obj for obj in associated_objects if obj.split("_")[0] == object_type]
+            rows.append(row)
+
+        return pd.DataFrame(rows)
 
 
 def find_trace_with_most_matching_activities(activity_sequence, traces):
@@ -243,20 +256,25 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
             graph.set_covered_traces(traces)
             mergedGraphs.append(graph)
 
-    return mergedGraphs, traces
+    return mergedGraphs
 
 
-def convert_to_ocel(merged_graph):
-    topological_ordering = list(nx.topological_sort(merged_graph.graph))
-    rows = []
-    for node in topological_ordering:
-        row = {"activity": merged_graph.get_node_activity(node)}
-        associated_objects = list(merged_graph.get_node_associated_objects(node))
-        for object_type in merged_graph.get_node_related_objects(node):
-            row[object_type] = [obj for obj in associated_objects if obj.split("_")[0] == object_type]
-        rows.append(row)
+def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_stepsize):
+    # stepsizes in hours
+    # convert each graph to a dataframe
+    dataframes = [graph.convert_to_dataframe() for graph in merged_graphs]
 
-    return pd.DataFrame(rows)
+    # randomly assign timestamps to events of each dataframe according to passed stepsize
+    for df in dataframes:
+        date = start_date
+        dates = []
+        for i in range(len(df)):
+            date += timedelta(hours=random.uniform(min_time_stepsize, max_time_stepsize))
+            dates.append(date)
+        df["timestamp"] = dates
+
+    # merge resulting dataframes and sort by timestamp
+    return pd.concat(dataframes).sort_values("timestamp", ignore_index=True)
 
 
 if __name__ == '__main__':
@@ -276,14 +294,13 @@ if __name__ == '__main__':
         simulation.start_simulation()
         traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=False)
 
-    graphs, traces = combine_object_types(traces, max_iterations=50, max_retries=10)
+    graphs = combine_object_types(traces, max_iterations=50, max_retries=10)
 
-    dataframes = []
+    dataframe = convert_to_ocel(graphs, datetime(2020, 1, 1), 1, 10)
+    print(dataframe)
 
+    unmatched_events = 0
     for graph in graphs:
-        dataframes.append(convert_to_ocel(graph))
+        unmatched_events += graph.number_of_unmatched_events()
 
-    print(dataframes)
-
-    for graph in graphs:
-        print(graph.number_of_unmatched_events())
+    print("Number of unmatched events: ", unmatched_events)
