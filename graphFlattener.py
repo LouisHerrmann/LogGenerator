@@ -12,7 +12,9 @@ class IdFactory:
         return self.id
 
 
-def createGraph(dot_graph):
+def create_graph(dot_graph):
+    object_types = set()
+
     dot_graph = dot_graph.replace("\n", "")
     dot_graph = pydotplus.graph_from_dot_data(dot_graph)
 
@@ -22,6 +24,7 @@ def createGraph(dot_graph):
     graph = nx.DiGraph()
     for edge in dot_graph.get_edges():
         object_type = edge.get_attributes()["object"]
+        object_types.add(object_type)
         s_id, d_id = edge.get_source(), edge.get_destination()
         for node_id in s_id, d_id:
             node = dot_graph.get_node(node_id)[0]
@@ -37,7 +40,7 @@ def createGraph(dot_graph):
 
         graph.add_edge(id_mapping[s_id], id_mapping[d_id], object_type=object_type)
 
-    return graph
+    return graph, object_types
 
 
 def flatten_graph(graph, ot):
