@@ -53,3 +53,16 @@ def flatten_graph(graph, ot):
 
     graph.remove_nodes_from(to_be_removed)
     return graph
+
+
+def remove_self_loops(graph):
+    # for replay, we can simply remove self loops since activities with self loops can just be
+    # duplicated in the trace later
+    graph = deepcopy(graph)
+    to_be_removed = []
+    for edge in graph.edges:
+        if edge[0] == edge[1]:
+            to_be_removed.append(edge)
+
+    graph.remove_edges_from(to_be_removed)
+    return graph, [edge[0] for edge in to_be_removed]

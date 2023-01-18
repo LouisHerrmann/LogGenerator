@@ -1,10 +1,10 @@
 import pydotplus
 from collections import Counter, defaultdict
 from enum import Enum
-from random import choice
+from random import choice, randint
 from copy import deepcopy
-import pandas as pd
-from graphFlattener import create_graph, flatten_graph
+from graphFlattener import *
+
 
 class Status(Enum):
     ONGOING = 0
@@ -16,7 +16,7 @@ class Status(Enum):
 
 class Simulation:
     def __init__(self, graph, max_trace_length, max_cycles=2):
-        self.graph = graph
+        self.graph, self.nodes_with_self_loops = remove_self_loops(graph)
         self.trace_simulations = {}  # id : object
         self.max_cycles = max_cycles
         self.visited_edges = set()
@@ -50,10 +50,12 @@ class Simulation:
         self.trace_simulations[new_id] = trace
         return trace
 
-    def get_activity_sequence_representation(self):
+    def get_activity_sequence_representation(self, ignore_self_loops=True):
         traces = []
         for trace in self.trace_simulations.values():
             if trace.status == Status.FINISHED_SUCCESSFULLY:
+                if not ignore_self_loops:
+                    trace.add_self_loops_to_trace()
                 traces.append(trace.map_to_visible_transition_names())
         return traces
 
@@ -169,6 +171,20 @@ class TraceSimulation:
             if "BPMN_TASK" in activity_name:
                 visible_transitions.append(activity_name)
         return visible_transitions
+
+    def add_self_loops_to_trace(self):
+        # for the nodes with self loops insert between 0 and max_cycles occurences of the loop
+        trace_nodes_with_loops = set(self.sequence).intersection(self.simulation.nodes_with_self_loops)
+        if trace_nodes_with_loops != set():
+            new_sequence = []
+            iterate_sequence = deepcopy(self.sequence)
+            index = 0
+            for node in iterate_sequence:
+                if node in trace_nodes_with_loops:
+                    repeat_times = randint(0, self.simulation.max_cycles)
+                    self.sequence = self.sequence[:index] + [node]*repeat_times + self.sequence[index:]
+                    index += repeat_times
+                index += 1
 
 
 if __name__ == '__main__':
