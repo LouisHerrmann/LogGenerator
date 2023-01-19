@@ -3,6 +3,7 @@ from replayer import *
 from datetime import timedelta, datetime
 import pandas as pd
 import sys
+import numpy as np
 
 
 class MergedTraceGraph:
@@ -274,7 +275,7 @@ def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_steps
 
         # object ids are only unique within each dataframe, thus we postfix ids with index of df
         for ot in set(df.columns).difference(["end_time", "activity"]):
-            df[ot] = df[ot].apply(lambda x: [obj + "_" + str(index) for obj in x])
+            df[ot] = df[ot].apply(lambda x: [obj + "_" + str(index) for obj in x] if x is not np.NaN else x)
 
     combined_df = pd.concat(dataframes).sort_values("end_time", ignore_index=True)
 
