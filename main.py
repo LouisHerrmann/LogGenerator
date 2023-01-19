@@ -271,10 +271,24 @@ def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_steps
         for i in range(len(df)):
             date += timedelta(hours=random.uniform(min_time_stepsize, max_time_stepsize))
             dates.append(date)
-        df["timestamp"] = dates
+        df["end_time"] = dates
 
     # merge resulting dataframes and sort by timestamp
-    return pd.concat(dataframes).sort_values("timestamp", ignore_index=True)
+    return pd.concat(dataframes).sort_values("end_time", ignore_index=True)
+
+
+def flatten_OCEL(dataframe):
+    flattened_logs = {}
+    object_types = set(dataframe.columns).difference(["activity", "end_time"])
+    for ot in object_types:
+        df_ot = dataframe.drop(columns=object_types.difference(ot)).dropna()
+        # convert list of single object name into just object name
+        df_ot[ot] = df_ot[ot].apply(lambda x: x[0])
+        # change column names and order
+        df_ot = df_ot[[ot, "activity", "end_time"]]
+        df_ot.columns = ["traceid", "activity", "end_time"]
+        flattened_logs[ot] = df_ot
+    return flattened_logs
 
 
 if __name__ == '__main__':
@@ -287,18 +301,26 @@ if __name__ == '__main__':
     graphs = {}
     traces = {}
     for ot in object_types:
+        # flatten input model for each object type
         graph = flatten_graph(G, ot)
         graphs[ot] = graph
 
+        # replay each of the flattened logs and save replayed traces
         simulation = Simulation(graph, max_trace_length=50, max_cycles=2)
         simulation.start_simulation()
         traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=False)
 
+    # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
     graphs = combine_object_types(traces, max_iterations=50, max_retries=10)
 
+    # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
     dataframe = convert_to_ocel(graphs, datetime(2020, 1, 1), 1, 10)
-    print(dataframe)
 
+    # flatten dataframe for each object type and save as csv
+    flattened_logs = flatten_OCEL(dataframe)
+    print(flattened_logs)
+
+    # check number of unmatched shared activities (goal: 0)
     unmatched_events = 0
     for graph in graphs:
         unmatched_events += graph.number_of_unmatched_events()
