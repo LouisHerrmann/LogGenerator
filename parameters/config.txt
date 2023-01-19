@@ -1,0 +1,16 @@
+100;2;0;50;10;2020,1,1;1;10
+
+# Replay parameters
+# max_trace_length: max supported trace length when simulating model
+# max_cycles:  max number of cycles until aborting when simulating model
+# ignore_self_loops: whether to ignore self loops when simulating model
+
+# Merging parameters
+# max_iterations: max traces to combine when merging different object type's traces
+# max_retries: max number of tries we restart the merging of traces (in case, there still are unmatched shared
+#                                       activities after, we pick the one with the fewest unmatched activities)
+
+# Log generation parameters
+# start_date: start date of first event in log
+# min_time_stepsize: min time between events in hours
+# max_time_stepsize: max time between events in hours

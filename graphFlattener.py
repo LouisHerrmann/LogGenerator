@@ -15,6 +15,7 @@ class IdFactory:
 def create_graph(dot_graph):
     object_types = set()
 
+    # remove newline characters since they can cause issues and be interpreted as nodes
     dot_graph = dot_graph.replace("\n", "")
     dot_graph = pydotplus.graph_from_dot_data(dot_graph)
 

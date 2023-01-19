@@ -1,9 +1,8 @@
 import random
-from collections import defaultdict
-import pandas as pd
-import networkx as nx
 from replayer import *
 from datetime import timedelta, datetime
+import pandas as pd
+import sys
 
 
 class MergedTraceGraph:
@@ -273,8 +272,13 @@ def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_steps
             dates.append(date)
         df["end_time"] = dates
 
+    combined_df = pd.concat(dataframes).sort_values("end_time", ignore_index=True)
+
+    # remove "BPMN_TASK(): ..." from activity names
+    combined_df["activity"] = combined_df["activity"].apply(lambda x: x.split("BPMN_TASK(")[1].split(")")[0])
+
     # merge resulting dataframes and sort by timestamp
-    return pd.concat(dataframes).sort_values("end_time", ignore_index=True)
+    return combined_df
 
 
 def flatten_OCEL(dataframe):
@@ -291,11 +295,54 @@ def flatten_OCEL(dataframe):
     return flattened_logs
 
 
-if __name__ == '__main__':
+def get_parameters(parameter_path):
+    param_file = open(parameter_path, "r")
+    data = param_file.readline()
+    param_file.close()
+    data = data.replace("\n", "").split(";")
+    params = []
+    for i in range(len(data)):
+        p = data[i]
+        if i == 5:
+            p = p.split(",")
+            p = datetime(int(p[0]), int(p[1]), int(p[2]))
+        else:
+            p = int(p)
+        params.append(p)
+    return params
 
-    graph = """digraph { 0[label="BPMN_START"]; 2[label="BPMN_TASK(CreateCustomerInvoice):135138"]; 3[label="BPMN_EXCLUSIVE_CHOICE"]; 4[label="BPMN_EXCLUSIVE_CHOICE"]; 5[label="BPMN_TASK(SendOverdueNotice):78174"]; 6[label="BPMN_TASK(ClearCustomerInvoice):135138"]; 1[label="BPMN_END"]; 7[label="BPMN_START"]; 9[label="BPMN_TASK(CreateDelivery):135138"]; 10[label="BPMN_TASK(ExecutePicking):135138"]; 11[label="BPMN_TASK(InsufficientMaterialFound):28381"]; 12[label="BPMN_TASK(PostGoodsIssue):135138"]; 8[label="BPMN_END"]; 13[label="BPMN_START"]; 15[label="BPMN_TASK(PostGoodsReceipt):135138"]; 16[label="BPMN_TASK(ReceiveVendorInvoice):135138"]; 14[label="BPMN_END"]; 17[label="BPMN_START"]; 19[label="BPMN_TASK(CreatePurchaseOrder):135138"]; 20[label="BPMN_TASK(ApprovePurchaseOrder):130896"]; 21[label="BPMN_TASK(SendPurchaseOrder):130896"]; 22[label="BPMN_TASK(SendDeliveryOverdueNotice):28381"]; 18[label="BPMN_END"]; 23[label="BPMN_START"]; 25[label="BPMN_TASK(CreateQuotation):135138"]; 26[label="BPMN_TASK(ApproveQuotation):137966"]; 27[label="BPMN_TASK(CreateSalesOrder):135138"]; 24[label="BPMN_END"]; 28[label="BPMN_START"]; 30[label="BPMN_EXCLUSIVE_CHOICE"]; 31[label="BPMN_EXCLUSIVE_CHOICE"]; 32[label="BPMN_TASK(RemoveCreditBlock):48278"]; 33[label="BPMN_TASK(RemoveDeliveryBlock):46864"]; 29[label="BPMN_END"]; 34[label="BPMN_START"]; 35[label="BPMN_END"]; 36[label="BPMN_START"]; 37[label="BPMN_END"]; 38[label="BPMN_START"]; 40[label="BPMN_EXCLUSIVE_CHOICE"]; 42[label="BPMN_TASK(ReceiveOverdueNotice):44036"]; 41[label="BPMN_EXCLUSIVE_CHOICE"]; 43[label="BPMN_TASK(SetPaymentBlock):42723"]; 44[label="BPMN_TASK(RemovePaymentBlock):42723"]; 45[label="BPMN_TASK(ClearVendorInvoice):135138"]; 39[label="BPMN_END"]; 0 -> 2 [object=0, label=72720]; 2 -> 3 [object=0, label=72720]; 3 -> 4 [object=0, label=36360]; 3 -> 5 [object=0, label=36360]; 5 -> 4 [object=0, label=36360]; 4 -> 6 [object=0, label=72720]; 6 -> 1 [object=0, label=72720]; 7 -> 9 [object=1, label=117059]; 9 -> 10 [object=1, label=117059]; 10 -> 11 [object=1, label=117059]; 11 -> 12 [object=1, label=117059]; 12 -> 2 [object=1, label=117059]; 2 -> 8 [object=1, label=117059]; 13 -> 15 [object=2, label=14544]; 15 -> 10 [object=2, label=14544]; 10 -> 11 [object=2, label=14544]; 11 -> 12 [object=2, label=14544]; 12 -> 16 [object=2, label=14544]; 16 -> 14 [object=2, label=14544]; 17 -> 19 [object=3, label=14544]; 19 -> 20 [object=3, label=14544]; 20 -> 21 [object=3, label=14544]; 21 -> 22 [object=3, label=14544]; 22 -> 15 [object=3, label=14544]; 15 -> 16 [object=3, label=14544]; 16 -> 18 [object=3, label=14544]; 23 -> 25 [object=4, label=14544]; 25 -> 26 [object=4, label=14544]; 26 -> 27 [object=4, label=14544]; 27 -> 24 [object=4, label=14544]; 28 -> 27 [object=5, label=14544]; 27 -> 30 [object=5, label=14544]; 30 -> 31 [object=5, label=7272]; 30 -> 32 [object=5, label=7272]; 32 -> 33 [object=5, label=7272]; 33 -> 31 [object=5, label=7272]; 31 -> 9 [object=5, label=14544]; 9 -> 2 [object=5, label=14544]; 2 -> 29 [object=5, label=14544]; 34 -> 27 [object=6, label=14544]; 27 -> 9 [object=6, label=14544]; 9 -> 2 [object=6, label=14544]; 2 -> 35 [object=6, label=14544]; 36 -> 19 [object=7, label=4040]; 19 -> 37 [object=7, label=4040]; 38 -> 16 [object=8, label=72922]; 16 -> 40 [object=8, label=72922]; 40 -> 42 [object=8, label=36057]; 42 -> 41 [object=8, label=36057]; 40 -> 43 [object=8, label=36865]; 43 -> 44 [object=8, label=36865]; 44 -> 41 [object=8, label=36865]; 41 -> 45 [object=8, label=72922]; 45 -> 39 [object=8, label=72922];}"""
-#    graph = """digraph { 0[label="BPMN_START"]; 2[label="BPMN_TASK(CreateCustomerInvoice):135138"]; 3[label="BPMN_EXCLUSIVE_CHOICE"]; 4[label="BPMN_TASK(SendOverdueNotice):78174"]; 5[label="BPMN_TASK(ClearCustomerInvoice):135138"]; 1[label="BPMN_END"]; 6[label="BPMN_START"]; 8[label="BPMN_TASK(CreateDelivery):135138"]; 9[label="BPMN_TASK(ExecutePicking):135138"]; 10[label="BPMN_EXCLUSIVE_CHOICE"]; 11[label="BPMN_EXCLUSIVE_CHOICE"]; 12[label="BPMN_TASK(InsufficientMaterialFound):28381"]; 13[label="BPMN_TASK(PostGoodsIssue):135138"]; 7[label="BPMN_END"]; 14[label="BPMN_START"]; 16[label="BPMN_TASK(CreateQuotation):135138"]; 17[label="BPMN_TASK(ApproveQuotation):137966"]; 18[label="BPMN_TASK(CreateSalesOrder):135138"]; 15[label="BPMN_END"]; 19[label="BPMN_START"]; 21[label="BPMN_EXCLUSIVE_CHOICE"]; 22[label="BPMN_EXCLUSIVE_CHOICE"]; 23[label="BPMN_PARALLEL"]; 25[label="BPMN_EXCLUSIVE_CHOICE"]; 26[label="BPMN_EXCLUSIVE_CHOICE"]; 27[label="BPMN_TASK(ChangeShipTo):4242"]; 28[label="BPMN_TASK(RemoveDeliveryBlock):46864"]; 24[label="BPMN_PARALLEL"]; 29[label="BPMN_TASK(RemoveCreditBlock):48278"]; 30[label="BPMN_TASK(ChangeSoldTo):1414"]; 20[label="BPMN_END"]; 31[label="BPMN_START"]; 33[label="BPMN_EXCLUSIVE_CHOICE"]; 34[label="BPMN_EXCLUSIVE_CHOICE"]; 35[label="BPMN_TASK(ChangeSalesOrderItem):81305"]; 32[label="BPMN_END"]; 0 -> 2 [object=0, label=135138]; 2 -> 3 [object=0, label=135138]; 3 -> 4 [object=0, label=78174]; 4 -> 3 [object=0, label=78174]; 3 -> 5 [object=0, label=135138]; 5 -> 1 [object=0, label=135138]; 6 -> 8 [object=1, label=1086053]; 8 -> 9 [object=1, label=1086053]; 9 -> 10 [object=1, label=1086053]; 10 -> 11 [object=1, label=856884]; 10 -> 12 [object=1, label=229169]; 12 -> 11 [object=1, label=229169]; 11 -> 13 [object=1, label=1086053]; 13 -> 2 [object=1, label=1086053]; 2 -> 7 [object=1, label=1086053]; 14 -> 16 [object=2, label=135138]; 16 -> 17 [object=2, label=135138]; 17 -> 17 [object=2, label=2828]; 17 -> 18 [object=2, label=135138]; 18 -> 15 [object=2, label=135138]; 19 -> 18 [object=3, label=135138]; 18 -> 21 [object=3, label=135138]; 21 -> 22 [object=3, label=86860]; 21 -> 23 [object=3, label=46864]; 23 -> 25 [object=3, label=46864]; 25 -> 26 [object=3, label=42622]; 25 -> 27 [object=3, label=4242]; 27 -> 26 [object=3, label=4242]; 26 -> 28 [object=3, label=46864]; 28 -> 24 [object=3, label=46864]; 23 -> 29 [object=3, label=46864]; 29 -> 29 [object=3, label=1414]; 29 -> 24 [object=3, label=46864]; 24 -> 22 [object=3, label=46864]; 21 -> 30 [object=3, label=1414]; 30 -> 22 [object=3, label=1414]; 22 -> 8 [object=3, label=135138]; 8 -> 2 [object=3, label=135138]; 2 -> 20 [object=3, label=135138]; 31 -> 18 [object=4, label=610848]; 18 -> 33 [object=4, label=610848]; 33 -> 34 [object=4, label=532876]; 33 -> 35 [object=4, label=77972]; 35 -> 34 [object=4, label=77972]; 34 -> 8 [object=4, label=610848]; 8 -> 2 [object=4, label=610848]; 2 -> 32 [object=4, label=610848];}"""
-    graph = """digraph { 0[label="BPMN_START"]; 2[label="BPMN_TASK(CreateCustomerInvoice):135138"]; 3[label="BPMN_EXCLUSIVE_CHOICE"]; 4[label="BPMN_TASK(SendOverdueNotice):78174"]; 5[label="BPMN_TASK(ClearCustomerInvoice):135138"]; 1[label="BPMN_END"]; 6[label="BPMN_START"]; 8[label="BPMN_TASK(CreateDelivery):135138"]; 9[label="BPMN_TASK(ExecutePicking):135138"]; 10[label="BPMN_EXCLUSIVE_CHOICE"]; 11[label="BPMN_EXCLUSIVE_CHOICE"]; 12[label="BPMN_TASK(InsufficientMaterialFound):28381"]; 13[label="BPMN_TASK(PostGoodsIssue):135138"]; 7[label="BPMN_END"]; 14[label="BPMN_START"]; 16[label="BPMN_TASK(PostGoodsReceipt):135138"]; 17[label="BPMN_EXCLUSIVE_CHOICE"]; 18[label="BPMN_EXCLUSIVE_CHOICE"]; 19[label="BPMN_TASK(ReceiveVendorInvoice):135138"]; 15[label="BPMN_END"]; 20[label="BPMN_START"]; 22[label="BPMN_TASK(CreatePurchaseOrder):135138"]; 23[label="BPMN_EXCLUSIVE_CHOICE"]; 25[label="BPMN_PARALLEL"]; 27[label="BPMN_TASK(ApprovePurchaseOrder):130896"]; 28[label="BPMN_TASK(SendPurchaseOrder):130896"]; 26[label="BPMN_PARALLEL"]; 29[label="BPMN_EXCLUSIVE_CHOICE"]; 30[label="BPMN_TASK(ChangePrice):14948"]; 31[label="BPMN_EXCLUSIVE_CHOICE"]; 24[label="BPMN_EXCLUSIVE_CHOICE"]; 32[label="BPMN_TASK(SendDeliveryOverdueNotice):28381"]; 33[label="BPMN_TASK(ChangeQuantity):19897"]; 21[label="BPMN_END"]; 34[label="BPMN_START"]; 36[label="BPMN_TASK(CreateQuotation):135138"]; 37[label="BPMN_TASK(ApproveQuotation):137966"]; 38[label="BPMN_TASK(CreateSalesOrder):135138"]; 35[label="BPMN_END"]; 39[label="BPMN_START"]; 41[label="BPMN_EXCLUSIVE_CHOICE"]; 42[label="BPMN_EXCLUSIVE_CHOICE"]; 43[label="BPMN_PARALLEL"]; 45[label="BPMN_EXCLUSIVE_CHOICE"]; 46[label="BPMN_EXCLUSIVE_CHOICE"]; 47[label="BPMN_TASK(ChangeShipTo):4242"]; 48[label="BPMN_TASK(RemoveDeliveryBlock):46864"]; 44[label="BPMN_PARALLEL"]; 49[label="BPMN_TASK(RemoveCreditBlock):48278"]; 50[label="BPMN_TASK(ChangeSoldTo):1414"]; 40[label="BPMN_END"]; 51[label="BPMN_START"]; 53[label="BPMN_EXCLUSIVE_CHOICE"]; 54[label="BPMN_EXCLUSIVE_CHOICE"]; 55[label="BPMN_TASK(ChangeSalesOrderItem):81305"]; 52[label="BPMN_END"]; 0 -> 2 [object=0, label=135138]; 2 -> 3 [object=0, label=135138]; 3 -> 4 [object=0, label=78174]; 4 -> 3 [object=0, label=78174]; 3 -> 5 [object=0, label=135138]; 5 -> 1 [object=0, label=135138]; 6 -> 8 [object=1, label=1086053]; 8 -> 9 [object=1, label=1086053]; 9 -> 10 [object=1, label=1086053]; 10 -> 11 [object=1, label=856884]; 10 -> 12 [object=1, label=229169]; 12 -> 11 [object=1, label=229169]; 11 -> 13 [object=1, label=1086053]; 13 -> 2 [object=1, label=1086053]; 2 -> 7 [object=1, label=1086053]; 14 -> 16 [object=2, label=605697]; 16 -> 9 [object=2, label=605697]; 9 -> 17 [object=2, label=605697]; 17 -> 18 [object=2, label=479346]; 17 -> 12 [object=2, label=126351]; 12 -> 18 [object=2, label=126351]; 18 -> 13 [object=2, label=605697]; 13 -> 19 [object=2, label=605697]; 19 -> 15 [object=2, label=605697]; 20 -> 22 [object=3, label=341077]; 22 -> 23 [object=3, label=341077]; 23 -> 25 [object=3, label=330169]; 25 -> 27 [object=3, label=330169]; 27 -> 28 [object=3, label=330169]; 28 -> 26 [object=3, label=330169]; 25 -> 29 [object=3, label=330169]; 29 -> 30 [object=3, label=10706]; 30 -> 29 [object=3, label=10706]; 29 -> 26 [object=3, label=330169]; 26 -> 31 [object=3, label=330169]; 31 -> 24 [object=3, label=257954]; 31 -> 32 [object=3, label=72215]; 32 -> 24 [object=3, label=72215]; 23 -> 33 [object=3, label=10908]; 33 -> 33 [object=3, label=3333]; 33 -> 24 [object=3, label=10908]; 24 -> 16 [object=3, label=341077]; 16 -> 19 [object=3, label=341077]; 19 -> 21 [object=3, label=341077]; 34 -> 36 [object=4, label=135138]; 36 -> 37 [object=4, label=135138]; 37 -> 37 [object=4, label=2828]; 37 -> 38 [object=4, label=135138]; 38 -> 35 [object=4, label=135138]; 39 -> 38 [object=5, label=135138]; 38 -> 41 [object=5, label=135138]; 41 -> 42 [object=5, label=86860]; 41 -> 43 [object=5, label=46864]; 43 -> 45 [object=5, label=46864]; 45 -> 46 [object=5, label=42622]; 45 -> 47 [object=5, label=4242]; 47 -> 46 [object=5, label=4242]; 46 -> 48 [object=5, label=46864]; 48 -> 44 [object=5, label=46864]; 43 -> 49 [object=5, label=46864]; 49 -> 49 [object=5, label=1414]; 49 -> 44 [object=5, label=46864]; 44 -> 42 [object=5, label=46864]; 41 -> 50 [object=5, label=1414]; 50 -> 42 [object=5, label=1414]; 42 -> 8 [object=5, label=135138]; 8 -> 2 [object=5, label=135138]; 2 -> 40 [object=5, label=135138]; 51 -> 38 [object=6, label=610848]; 38 -> 53 [object=6, label=610848]; 53 -> 54 [object=6, label=532876]; 53 -> 55 [object=6, label=77972]; 55 -> 54 [object=6, label=77972]; 54 -> 8 [object=6, label=610848]; 8 -> 2 [object=6, label=610848]; 2 -> 52 [object=6, label=610848];}"""
+
+if __name__ == '__main__':
+    # Replay parameters
+    # max_trace_length: max supported trace length when simulating model
+    # max_cycles:  max number of cycles until aborting when simulating model
+    # ignore_self_loops: whether to ignore self loops when simulating model (0 or 1)
+
+    # Merging parameters
+    # max_iterations: max traces to combine when merging different object type's traces
+    # max_retries: max number of tries we restart the merging of traces (in case, there still are unmatched shared
+    #                                       activities after, we pick the one with the fewest unmatched activities)
+
+    # Log generation parameters
+    # start_date: start date of first event in log (YYYY, M, D)
+    # min_time_stepsize: min time between events in hours
+    # max_time_stepsize: max time between events in hours
+
+    args = sys.argv
+    if len(args) <= 1:
+        input_path = "input/example.dot"
+        output_path = "output"
+        parameter_path = "parameters/config.txt"
+    else:
+        input_path = args[1]
+        output_path = args[2]
+        parameter_path = args[3]
+
+    max_trace_length, max_cycles, ignore_self_loops, \
+        max_iterations, max_retries, \
+        start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
+
+    graph = pydotplus.graph_from_dot_file(input_path).to_string()
 
     G, object_types = create_graph(graph)
     graphs = {}
@@ -306,23 +353,25 @@ if __name__ == '__main__':
         graphs[ot] = graph
 
         # replay each of the flattened logs and save replayed traces
-        simulation = Simulation(graph, max_trace_length=50, max_cycles=2)
+        simulation = Simulation(graph, max_trace_length=max_trace_length, max_cycles=max_cycles)
         simulation.start_simulation()
-        traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=False)
+        traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=ignore_self_loops)
 
     # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
-    graphs = combine_object_types(traces, max_iterations=50, max_retries=10)
+    graphs = combine_object_types(traces, max_iterations=max_iterations, max_retries=max_retries)
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
-    dataframe = convert_to_ocel(graphs, datetime(2020, 1, 1), 1, 10)
+    dataframe = convert_to_ocel(graphs, start_date=start_date,
+                                min_time_stepsize=min_time_stepsize,
+                                max_time_stepsize=max_time_stepsize)
 
     # flatten dataframe for each object type and save as csv
     flattened_logs = flatten_OCEL(dataframe)
-    print(flattened_logs)
+    for ot, df in flattened_logs.items():
+        df.to_csv(output_path + "/" + ot + ".csv", index=False)
 
     # check number of unmatched shared activities (goal: 0)
     unmatched_events = 0
     for graph in graphs:
         unmatched_events += graph.number_of_unmatched_events()
-
     print("Number of unmatched events: ", unmatched_events)
