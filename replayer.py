@@ -1,8 +1,6 @@
-import pydotplus
 from collections import Counter, defaultdict
 from enum import Enum
 from random import choice, randint
-from copy import deepcopy
 from graphFlattener import *
 
 
@@ -23,8 +21,10 @@ class Simulation:
         self.max_trace_length = max_trace_length
 
         # find start and end nodes
-        self.start_node = [node_id for node_id in graph.nodes if graph.nodes.get(node_id)["act_name"] == '"BPMN_START"'][0]
-        self.end_node = [node_id for node_id in graph.nodes if graph.nodes.get(node_id)["act_name"] == '"BPMN_END"'][0]
+        self.start_node = [node_id for node_id in graph.nodes
+                           if graph.nodes.get(node_id)["act_name"] == '"BPMN_START"'][0]
+        self.end_node = [node_id for node_id in graph.nodes
+                         if graph.nodes.get(node_id)["act_name"] == '"BPMN_END"'][0]
 
     def start_simulation(self):
         # set marking to start_nodes and then initialize one trace_simulation
@@ -35,7 +35,8 @@ class Simulation:
         trace = TraceSimulation(0, self, start_marking, [], set())
         self.trace_simulations[0] = trace
 
-        # by first finishing certain traces, we follow a DFS approach and can check which edges we already successfuly visited
+        # by first finishing certain traces, we follow a DFS approach and can check
+        # which edges we already successfully visited
         i = 0
         while i < len(self.trace_simulations):
             while self.trace_simulations[i].status == Status.ONGOING:
@@ -46,7 +47,9 @@ class Simulation:
         # duplicate trace with identified by id and generate new id for it
         to_be_duplicated = self.trace_simulations[id]
         new_id = max(self.trace_simulations.keys()) + 1
-        trace = TraceSimulation(new_id, self, deepcopy(to_be_duplicated.marking), deepcopy(to_be_duplicated.sequence), deepcopy(to_be_duplicated.edge_choices_made))
+        trace = TraceSimulation(new_id, self, deepcopy(to_be_duplicated.marking),
+                                deepcopy(to_be_duplicated.sequence),
+                                deepcopy(to_be_duplicated.edge_choices_made))
         self.trace_simulations[new_id] = trace
         return trace
 
@@ -61,7 +64,11 @@ class Simulation:
 
 
 class TraceSimulation:
-    def __init__(self, id, simulation, marking, sequence=[], edge_choices_made=set()):
+    def __init__(self, id, simulation, marking, sequence=None, edge_choices_made=None):
+        if sequence is None:
+            sequence = []
+        if edge_choices_made is None:
+            edge_choices_made = set()
         self.id = id
         self.simulation = simulation
         self.marking = marking
@@ -92,7 +99,8 @@ class TraceSimulation:
         base_marking = self.marking
 
         # choose which incoming edge's token to take
-        incoming_edge_with_token = choice([edge for edge in self.graph.in_edges(xor_node_id) if base_marking[edge] > 0])
+        incoming_edge_with_token = choice([edge for edge in self.graph.in_edges(xor_node_id)
+                                           if base_marking[edge] > 0])
         base_marking[incoming_edge_with_token] -= 1
 
         for edge_id in self.graph.out_edges(xor_node_id):
@@ -102,7 +110,8 @@ class TraceSimulation:
                 next_markings.append(new_marking)
                 self.edge_choices_made.add(edge_id)
         if len(next_markings) == 0:
-            # in case all follow-up choices have been visited already, we just return one, so we don't lose the current trace
+            # in case all follow-up choices have been visited already, we just return one,
+            # so we don't lose the current trace
             edge_id = choice(list(self.graph.out_edges(xor_node_id)))
             new_marking = deepcopy(base_marking)
             new_marking[edge_id] += 1
@@ -125,7 +134,7 @@ class TraceSimulation:
         enabled_nodes = self.get_enabled_nodes()
 
         # in case all end nodes have been reached, we are done
-        if enabled_nodes == set([self.simulation.end_node]):
+        if enabled_nodes == {self.simulation.end_node}:
             self.simulation.visited_edges = self.simulation.visited_edges.union(self.edge_choices_made)
             self.status = Status.FINISHED_SUCCESSFULLY
             return
@@ -141,7 +150,8 @@ class TraceSimulation:
         self.sequence.append(next_node_id)
 
         # don't consider xor nodes when checking for cycles since they can occur repeatedly without a loop
-        nodes_without_xor = [node_id for node_id in self.sequence if self.graph.nodes.get(node_id)["act_name"] != '"BPMN_EXCLUSIVE_CHOICE"']
+        nodes_without_xor = [node_id for node_id in self.sequence
+                             if self.graph.nodes.get(node_id)["act_name"] != '"BPMN_EXCLUSIVE_CHOICE"']
         counter = Counter(nodes_without_xor).values()
         if len(counter) > 0 and max(counter) > self.simulation.max_cycles:
             self.status = Status.STOPPED_DUE_TO_CYCLE_LIMIT

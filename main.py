@@ -31,7 +31,7 @@ class MergedTraceGraph:
         related = []
         for node_id in self.graph.nodes:
             if self.get_node_activity(node_id) == activity:
-                related.add(node_id)
+                related.append(node_id)
         return related
 
     def get_node_associated_objects(self, node_id):
@@ -88,7 +88,7 @@ class MergedTraceGraph:
             if matching_node_id is None:
                 node_id = self.get_new_id()
                 required_objects = self.shared_act_dict[activity].difference([object_type])
-                self.graph.add_node(node_id, activity=activity, related_objects=set([object_type]))
+                self.graph.add_node(node_id, activity=activity, related_objects={object_type})
                 self.missing_objects[node_id] = required_objects
             else:
                 node_id = matching_node_id
