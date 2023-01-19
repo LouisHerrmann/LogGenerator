@@ -13,11 +13,12 @@ class Status(Enum):
 
 
 class Simulation:
-    def __init__(self, graph, max_trace_length, max_cycles=2):
+    def __init__(self, graph, max_trace_length, max_cycles=None):
+        if max_cycles is None:
+            max_cycles=2
         self.graph, self.nodes_with_self_loops = remove_self_loops(graph)
         self.trace_simulations = {}  # id : object
         self.max_cycles = max_cycles
-        self.visited_edges = set()
         self.max_trace_length = max_trace_length
 
         # find start and end nodes
@@ -36,7 +37,9 @@ class Simulation:
         self.trace_simulations[0] = trace
 
         # by first finishing certain traces, we follow a DFS approach and can check
-        # which edges we already successfully visited
+        # which edges we already successfully visited (currently are not checking this since lead to problems in past)
+        # alternative: bfs approach can be achieved by immediately playing all traces after duplication
+        # (can likely be parallelized better)
         i = 0
         while i < len(self.trace_simulations):
             while self.trace_simulations[i].status == Status.ONGOING:
@@ -62,6 +65,13 @@ class Simulation:
                 traces.append(trace.map_to_visible_transition_names())
         return traces
 
+    def check_node_coverage(self):
+        counter = {node: 0 for node in self.graph.nodes if node != self.start_node and node != self.end_node}
+        for trace in self.trace_simulations.values():
+            for node in trace.sequence:
+                counter[node] += 1
+
+        return counter
 
 class TraceSimulation:
     def __init__(self, id, simulation, marking, sequence=None, edge_choices_made=None):
@@ -104,18 +114,10 @@ class TraceSimulation:
         base_marking[incoming_edge_with_token] -= 1
 
         for edge_id in self.graph.out_edges(xor_node_id):
-            if edge_id not in self.simulation.visited_edges:
-                new_marking = deepcopy(base_marking)
-                new_marking[edge_id] += 1
-                next_markings.append(new_marking)
-                self.edge_choices_made.add(edge_id)
-        if len(next_markings) == 0:
-            # in case all follow-up choices have been visited already, we just return one,
-            # so we don't lose the current trace
-            edge_id = choice(list(self.graph.out_edges(xor_node_id)))
             new_marking = deepcopy(base_marking)
             new_marking[edge_id] += 1
             next_markings.append(new_marking)
+            self.edge_choices_made.add(edge_id)
         return next_markings
 
     def get_next_marking(self, node_id):
@@ -135,7 +137,6 @@ class TraceSimulation:
 
         # in case all end nodes have been reached, we are done
         if enabled_nodes == {self.simulation.end_node}:
-            self.simulation.visited_edges = self.simulation.visited_edges.union(self.edge_choices_made)
             self.status = Status.FINISHED_SUCCESSFULLY
             return
 
@@ -258,6 +259,8 @@ if __name__ == '__main__':
     }
     """
 
+    graph = """digraph { 0[label="BPMN_START"]; 2[label="BPMN_PARALLEL"]; 4[label="BPMN_EXCLUSIVE_CHOICE"]; 5[label="BPMN_EXCLUSIVE_CHOICE"]; 6[label="BPMN_TASK(PostCustomerInvoice):215950"]; 3[label="BPMN_PARALLEL"]; 7[label="BPMN_TASK(CreateCustomerInvoice):324013"]; 8[label="BPMN_EXCLUSIVE_CHOICE"]; 9[label="BPMN_EXCLUSIVE_CHOICE"]; 10[label="BPMN_PARALLEL"]; 12[label="BPMN_EXCLUSIVE_CHOICE"]; 13[label="BPMN_EXCLUSIVE_CHOICE"]; 14[label="BPMN_TASK(SetDunningBlock):26807"]; 15[label="BPMN_TASK(DueDatePassed):215950"]; 16[label="BPMN_EXCLUSIVE_CHOICE"]; 17[label="BPMN_EXCLUSIVE_CHOICE"]; 18[label="BPMN_TASK(CreateDunningNoticesLevel1):11295"]; 11[label="BPMN_PARALLEL"]; 19[label="BPMN_TASK(ChangePostedCustomerInvoice):48839"]; 20[label="BPMN_EXCLUSIVE_CHOICE"]; 21[label="BPMN_TASK(ClearCustomerInvoice):385376"]; 1[label="BPMN_END"]; 22[label="BPMN_START"]; 24[label="BPMN_PARALLEL"]; 25[label="BPMN_PARALLEL"]; 26[label="BPMN_EXCLUSIVE_CHOICE"]; 27[label="BPMN_EXCLUSIVE_CHOICE"]; 23[label="BPMN_END"]; 28[label="BPMN_START"]; 30[label="BPMN_TASK(CreateDelivery):387740"]; 31[label="BPMN_EXCLUSIVE_CHOICE"]; 33[label="BPMN_EXCLUSIVE_CHOICE"]; 34[label="BPMN_TASK(AddDeliveryItems):3712"]; 35[label="BPMN_TASK(SendOrderConfirmation):112776"]; 32[label="BPMN_EXCLUSIVE_CHOICE"]; 36[label="BPMN_TASK(CreateProFormaInvoice):93700"]; 37[label="BPMN_PARALLEL"]; 39[label="BPMN_EXCLUSIVE_CHOICE"]; 40[label="BPMN_EXCLUSIVE_CHOICE"]; 41[label="BPMN_TASK(PostGoodsIssue):916793"]; 38[label="BPMN_PARALLEL"]; 42[label="BPMN_EXCLUSIVE_CHOICE"]; 43[label="BPMN_TASK(PassCredit):1178"]; 29[label="BPMN_END"]; 44[label="BPMN_START"]; 46[label="BPMN_TASK(CreateSalesQuotation):136653"]; 47[label="BPMN_EXCLUSIVE_CHOICE"]; 48[label="BPMN_EXCLUSIVE_CHOICE"]; 49[label="BPMN_TASK(AddSalesQuotationItems):3968"]; 50[label="BPMN_TASK(ApproveSalesQuotationItem):407505"]; 51[label="BPMN_EXCLUSIVE_CHOICE"]; 52[label="BPMN_TASK(ChangeSalesQuotation):24970"]; 45[label="BPMN_END"]; 53[label="BPMN_START"]; 56[label="BPMN_EXCLUSIVE_CHOICE"]; 61[label="BPMN_EXCLUSIVE_CHOICE"]; 57[label="BPMN_EXCLUSIVE_CHOICE"]; 58[label="BPMN_TASK(ChangeSalesOrder):4995"]; 59[label="BPMN_EXCLUSIVE_CHOICE"]; 60[label="BPMN_EXCLUSIVE_CHOICE"]; 62[label="BPMN_TASK(ReleaseCreditHold):4222"]; 63[label="BPMN_EXCLUSIVE_CHOICE"]; 64[label="BPMN_TASK(RemoveDeliveryBlock):370"]; 65[label="BPMN_EXCLUSIVE_CHOICE"]; 55[label="BPMN_EXCLUSIVE_CHOICE"]; 66[label="BPMN_TASK(ChangeSalesOrderItem):5"]; 54[label="BPMN_END"]; 67[label="BPMN_START"]; 69[label="BPMN_TASK(ApproveSalesOrderItem):3260"]; 70[label="BPMN_PARALLEL"]; 71[label="BPMN_PARALLEL"]; 72[label="BPMN_EXCLUSIVE_CHOICE"]; 73[label="BPMN_EXCLUSIVE_CHOICE"]; 74[label="BPMN_TASK(ChangeSalesOrderScheduleLine):1382888"]; 75[label="BPMN_TASK(CreateSalesOrderScheduleLine):1452486"]; 68[label="BPMN_END"]; 0 -> 2 [object=0, label=6]; 2 -> 4 [object=0, label=6]; 4 -> 5 [object=0, label=1]; 4 -> 6 [object=0, label=5]; 6 -> 5 [object=0, label=5]; 5 -> 3 [object=0, label=6]; 2 -> 7 [object=0, label=6]; 7 -> 3 [object=0, label=6]; 3 -> 8 [object=0, label=6]; 8 -> 9 [object=0, label=1]; 8 -> 10 [object=0, label=5]; 10 -> 12 [object=0, label=5]; 12 -> 13 [object=0, label=1]; 12 -> 14 [object=0, label=4]; 14 -> 13 [object=0, label=4]; 13 -> 15 [object=0, label=5]; 15 -> 16 [object=0, label=5]; 16 -> 17 [object=0, label=4]; 16 -> 18 [object=0, label=1]; 18 -> 17 [object=0, label=1]; 17 -> 11 [object=0, label=5]; 10 -> 19 [object=0, label=5]; 19 -> 19 [object=0, label=1]; 19 -> 11 [object=0, label=5]; 11 -> 9 [object=0, label=5]; 9 -> 20 [object=0, label=2]; 9 -> 21 [object=0, label=4]; 21 -> 20 [object=0, label=4]; 20 -> 1 [object=0, label=6]; 22 -> 6 [object=1, label=5]; 6 -> 24 [object=1, label=5]; 24 -> 19 [object=1, label=5]; 19 -> 19 [object=1, label=1]; 19 -> 25 [object=1, label=5]; 24 -> 26 [object=1, label=5]; 26 -> 18 [object=1, label=1]; 18 -> 27 [object=1, label=1]; 26 -> 14 [object=1, label=4]; 14 -> 27 [object=1, label=4]; 27 -> 25 [object=1, label=5]; 24 -> 15 [object=1, label=5]; 15 -> 25 [object=1, label=5]; 25 -> 23 [object=1, label=5]; 28 -> 30 [object=2, label=802]; 30 -> 31 [object=2, label=802]; 31 -> 33 [object=2, label=688]; 31 -> 34 [object=2, label=73]; 34 -> 33 [object=2, label=73]; 33 -> 35 [object=2, label=437]; 35 -> 33 [object=2, label=437]; 33 -> 32 [object=2, label=761]; 31 -> 36 [object=2, label=41]; 36 -> 32 [object=2, label=41]; 32 -> 37 [object=2, label=802]; 37 -> 39 [object=2, label=802]; 39 -> 40 [object=2, label=77]; 39 -> 41 [object=2, label=725]; 41 -> 40 [object=2, label=725]; 40 -> 38 [object=2, label=802]; 37 -> 42 [object=2, label=802]; 42 -> 43 [object=2, label=1274]; 43 -> 42 [object=2, label=1274]; 42 -> 38 [object=2, label=802]; 38 -> 29 [object=2, label=802]; 44 -> 46 [object=3, label=121]; 46 -> 47 [object=3, label=121]; 47 -> 48 [object=3, label=106]; 47 -> 49 [object=3, label=15]; 49 -> 48 [object=3, label=15]; 48 -> 50 [object=3, label=121]; 50 -> 51 [object=3, label=121]; 51 -> 52 [object=3, label=85]; 52 -> 51 [object=3, label=85]; 51 -> 45 [object=3, label=121]; 53 -> 56 [object=4, label=16]; 56 -> 61 [object=4, label=24]; 56 -> 57 [object=4, label=23]; 57 -> 58 [object=4, label=31]; 58 -> 59 [object=4, label=31]; 59 -> 60 [object=4, label=23]; 59 -> 43 [object=4, label=8]; 43 -> 60 [object=4, label=8]; 60 -> 57 [object=4, label=8]; 60 -> 61 [object=4, label=1]; 60 -> 62 [object=4, label=22]; 62 -> 61 [object=4, label=22]; 61 -> 63 [object=4, label=41]; 61 -> 64 [object=4, label=6]; 64 -> 63 [object=4, label=6]; 63 -> 65 [object=4, label=20]; 63 -> 30 [object=4, label=27]; 30 -> 65 [object=4, label=27]; 65 -> 35 [object=4, label=11]; 35 -> 65 [object=4, label=11]; 65 -> 55 [object=4, label=45]; 65 -> 66 [object=4, label=2]; 66 -> 55 [object=4, label=2]; 55 -> 56 [object=4, label=31]; 55 -> 54 [object=4, label=16]; 67 -> 69 [object=5, label=756]; 69 -> 70 [object=5, label=756]; 70 -> 58 [object=5, label=756]; 58 -> 58 [object=5, label=1472]; 58 -> 71 [object=5, label=756]; 70 -> 72 [object=5, label=756]; 72 -> 73 [object=5, label=652]; 72 -> 74 [object=5, label=42]; 74 -> 74 [object=5, label=42]; 74 -> 73 [object=5, label=42]; 72 -> 36 [object=5, label=23]; 36 -> 36 [object=5, label=23]; 36 -> 73 [object=5, label=23]; 72 -> 75 [object=5, label=39]; 75 -> 73 [object=5, label=39]; 73 -> 71 [object=5, label=756]; 70 -> 30 [object=5, label=756]; 30 -> 71 [object=5, label=756]; 71 -> 68 [object=5, label=756];}"""
+
     G, object_types = create_graph(graph)
     graphs = {}
     traces = {}
@@ -268,5 +271,4 @@ if __name__ == '__main__':
         simulation = Simulation(graph, max_trace_length=20, max_cycles=2)
         simulation.start_simulation()
         traces[ot] = simulation.get_activity_sequence_representation()
-
-    print(traces)
+        print(simulation.check_node_coverage())

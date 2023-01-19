@@ -264,13 +264,17 @@ def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_steps
     dataframes = [graph.convert_to_dataframe() for graph in merged_graphs]
 
     # randomly assign timestamps to events of each dataframe according to passed stepsize
-    for df in dataframes:
+    for index, df in enumerate(dataframes):
         date = start_date
         dates = []
         for i in range(len(df)):
             date += timedelta(hours=random.uniform(min_time_stepsize, max_time_stepsize))
             dates.append(date)
         df["end_time"] = dates
+
+        # object ids are only unique within each dataframe, thus we postfix ids with index of df
+        for ot in set(df.columns).difference(["end_time", "activity"]):
+            df[ot] = df[ot].apply(lambda x: [obj + "_" + str(index) for obj in x])
 
     combined_df = pd.concat(dataframes).sort_values("end_time", ignore_index=True)
 
@@ -358,20 +362,24 @@ if __name__ == '__main__':
         traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=ignore_self_loops)
 
     # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
-    graphs = combine_object_types(traces, max_iterations=max_iterations, max_retries=max_retries)
+    merged_graphs = combine_object_types(traces, max_iterations=max_iterations, max_retries=max_retries)
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
-    dataframe = convert_to_ocel(graphs, start_date=start_date,
+    dataframe = convert_to_ocel(merged_graphs, start_date=start_date,
                                 min_time_stepsize=min_time_stepsize,
                                 max_time_stepsize=max_time_stepsize)
+
+    # check number of unmatched shared activities (goal: 0)
+    unmatched_events = 0
+    for graph in merged_graphs:
+        unmatched_events += graph.number_of_unmatched_events()
+    print("Number of unmatched events:", unmatched_events)
+
+    print(len(dataframe), "events were generated")
 
     # flatten dataframe for each object type and save as csv
     flattened_logs = flatten_OCEL(dataframe)
     for ot, df in flattened_logs.items():
         df.to_csv(output_path + "/" + ot + ".csv", index=False)
 
-    # check number of unmatched shared activities (goal: 0)
-    unmatched_events = 0
-    for graph in graphs:
-        unmatched_events += graph.number_of_unmatched_events()
-    print("Number of unmatched events: ", unmatched_events)
+    print(sum([len(df) for df in flattened_logs.values()]), "events after flattening")
