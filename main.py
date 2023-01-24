@@ -308,7 +308,7 @@ def get_parameters(parameter_path):
     params = []
     for i in range(len(data)):
         p = data[i]
-        if i == 5:
+        if i == 6:
             p = p.split(",")
             p = datetime(int(p[0]), int(p[1]), int(p[2]))
         else:
@@ -322,6 +322,8 @@ if __name__ == '__main__':
     # max_trace_length: max supported trace length when simulating model
     # max_cycles:  max number of cycles until aborting when simulating model
     # ignore_self_loops: whether to ignore self loops when simulating model (0 or 1)
+    # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements
+    #                                                                   (this can lead to longer replay times)
 
     # Merging parameters
     # max_iterations: max traces to combine when merging different object type's traces
@@ -343,7 +345,7 @@ if __name__ == '__main__':
         output_path = args[2]
         parameter_path = args[3]
 
-    max_trace_length, max_cycles, ignore_self_loops, \
+    max_trace_length, max_cycles, ignore_self_loops, minimize_for_node_coverage, \
         max_iterations, max_retries, \
         start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
 
@@ -358,12 +360,17 @@ if __name__ == '__main__':
         graphs[ot] = graph
 
         # replay each of the flattened logs and save replayed traces
-        simulation = Simulation(graph, max_trace_length=max_trace_length, max_cycles=max_cycles)
+        simulation = Simulation(graph,
+                                max_trace_length=max_trace_length,
+                                max_cycles=max_cycles,
+                                minimize_for_node_coverage=minimize_for_node_coverage)
         simulation.start_simulation()
         traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=ignore_self_loops)
 
     # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
-    merged_graphs = combine_object_types(traces, max_iterations=max_iterations, max_retries=max_retries)
+    merged_graphs = combine_object_types(traces,
+                                         max_iterations=max_iterations,
+                                         max_retries=max_retries)
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
     dataframe = convert_to_ocel(merged_graphs, start_date=start_date,

@@ -46,13 +46,19 @@ def create_graph(dot_graph):
 
 def flatten_graph(graph, ot):
     graph = deepcopy(graph)
-    to_be_removed = []
+    to_be_removed_nodes = []
+    to_be_removed_edges = []
 
     for node_id in graph.nodes:
         if ot not in graph.nodes.get(node_id)["object_types"]:
-            to_be_removed.append(node_id)
+            to_be_removed_nodes.append(node_id)
 
-    graph.remove_nodes_from(to_be_removed)
+    for edge_id in graph.edges:
+        if ot != graph.edges.get(edge_id)["object_type"]:
+            to_be_removed_edges.append(edge_id)
+
+    graph.remove_nodes_from(to_be_removed_nodes)
+    graph.remove_edges_from(to_be_removed_edges)
     return graph
 
 
@@ -67,3 +73,7 @@ def remove_self_loops(graph):
 
     graph.remove_edges_from(to_be_removed)
     return graph, [edge[0] for edge in to_be_removed]
+
+
+def to_dot_format(graph, file_path):
+    nx.drawing.nx_pydot.write_dot(graph, file_path)
