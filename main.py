@@ -4,7 +4,7 @@ from datetime import timedelta, datetime
 import pandas as pd
 import sys
 import numpy as np
-
+import difflib
 
 class MergedTraceGraph:
     def __init__(self, shared_act_dict):
@@ -81,6 +81,7 @@ class MergedTraceGraph:
     def add_trace(self, object_type, trace, trace_id, object_id):
         node_ids = []
         last_merged_node = None
+
         # add nodes
         for i in range(len(trace)):
             activity = trace[i]
@@ -131,11 +132,43 @@ class MergedTraceGraph:
         return pd.DataFrame(rows)
 
 
-def find_trace_with_most_matching_activities(activity_sequence, traces):
-    # finds the trace that minimizes the number of open activities that still need matching after merge
-    # i.e. if we have two traces t1, t2 with activities T1, M, T2 where M are the matching activities and T1, T2 the
-    # remaining unmatched ones, we want to minimize |T1| + |T2|
-    return []
+"""
+    def calc_matching_score(self, trace):
+        ot = trace.object_type
+        filtered_trace_sequence = trace.sequence # [act for act in trace.sequence if len(self.shared_act_dict[act]) > 1]
+        topological_order = [node for node in list(nx.topological_sort(self.graph))]
+        filtered_top_node_order = [node for node in topological_order
+                                                                if ot in self.missing_objects[node]]
+        filtered_top_act_order = [self.get_node_activity(node) for node in filtered_top_node_order]
+
+        seq = difflib.SequenceMatcher(None, filtered_top_act_order, filtered_trace_sequence)
+        matching = []
+        for block in seq.get_matching_blocks():
+            if block.size > 0:
+                for i in range(block.size):
+                    matching.append((filtered_top_node_order[block.a + i], block.b+i))
+
+        return seq.ratio(), matching
+
+
+    def find_trace_with_most_matching_activities(self, traces):
+        # finds the trace that minimizes the number of open activities that still need matching after merge
+        # i.e. if we have two traces t1, t2 with activities T1, M, T2 where M are the matching activities and T1, T2 the
+        # remaining unmatched ones, we want to minimize |T1| + |T2|
+        max_trace = None
+        max_score = 0
+        max_matching = None
+        for trace in traces:
+            score, matching = self.calc_matching_score(trace)
+            if score >= max_score:
+                max_trace = trace
+                max_score, max_matching = score, matching
+
+        if max_score >= 1:
+            return trace #, max_matching
+        else:
+            return False
+"""
 
 
 class Traces:
