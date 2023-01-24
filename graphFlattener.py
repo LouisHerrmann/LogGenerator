@@ -39,7 +39,13 @@ def create_graph(dot_graph):
             related_object_types = graph.nodes.get(id_mapping[node_id])["object_types"].add(object_type)
             nx.set_node_attributes(graph, {node_id: {"object_types": related_object_types}})
 
-        graph.add_edge(id_mapping[s_id], id_mapping[d_id], object_type=object_type)
+        # we don't have multiple edges between same nodes. Instead, we assign set of object types to cover this
+        existing_edge = graph.edges.get((id_mapping[s_id], id_mapping[d_id]))
+        if existing_edge:
+            nx.set_edge_attributes(graph, {(id_mapping[s_id], id_mapping[d_id]):
+                                               {"object_types": existing_edge["object_types"].union(object_type)}})
+        else:
+            graph.add_edge(id_mapping[s_id], id_mapping[d_id], object_types={object_type})
 
     return graph, object_types
 
@@ -54,7 +60,7 @@ def flatten_graph(graph, ot):
             to_be_removed_nodes.append(node_id)
 
     for edge_id in graph.edges:
-        if ot != graph.edges.get(edge_id)["object_type"]:
+        if ot not in graph.edges.get(edge_id)["object_types"]:
             to_be_removed_edges.append(edge_id)
 
     graph.remove_nodes_from(to_be_removed_nodes)

@@ -1,9 +1,11 @@
-100;2;0;50;10;2020,1,1;1;10
+100;2;0;1;50;10;2020,1,1;1;10
 
 # Replay parameters
 # max_trace_length: max supported trace length when simulating model
 # max_cycles:  max number of cycles until aborting when simulating model
 # ignore_self_loops: whether to ignore self loops when simulating model
+# minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements (this can
+#                                                                                       lead to longer replay times)
 
 # Merging parameters
 # max_iterations: max traces to combine when merging different object type's traces
