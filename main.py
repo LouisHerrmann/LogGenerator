@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import difflib
 
+
 class MergedTraceGraph:
     def __init__(self, shared_act_dict):
         self.graph = nx.DiGraph()
@@ -188,6 +189,11 @@ class Traces:
     def get_object_types(self):
         return list(self.traces_dict_by_object_type.keys())
 
+    def get_object_type_of_trace(self, id):
+        return self.get_trace_by_id(id).object_type
+    def get_all_traces(self):
+        return self.traces_dict_by_id.keys()
+
     def get_trace_by_id(self, id):
         return self.traces_dict_by_id[id]
 
@@ -195,16 +201,17 @@ class Traces:
         return self.traces_dict_by_object_type[object_type]
 
     def get_uncovered_traces(self):
-        return [trace for trace in self.traces_dict_by_id.values() if not trace.covered]
+        return [trace_id for trace_id, trace in self.traces_dict_by_id.items() if not trace.covered]
 
     def get_traces_suitable_for_merging(self, object_type):
         possible_traces = self.get_uncovered_traces()
         if not possible_traces:
-            possible_traces = list(self.traces_dict_by_id.values())
-        possible_traces = [trace for trace in possible_traces if trace.object_type == object_type]
+            possible_traces = list(self.get_all_traces())
+        possible_traces = [trace_id for trace_id in possible_traces
+                           if trace_id in self.get_traces_for_object_type(object_type)]
         if not possible_traces:
             # in case there are no traces for a given object type, we allow for others as well
-            possible_traces = list(self.traces_dict_by_id.values())
+            possible_traces = list(self.get_all_traces())
         return possible_traces
 
 
@@ -227,15 +234,33 @@ class ObjectIdGenerator:
         return new_id
 
 
-def combine_object_types(traces_dict, max_iterations, max_retries=5):
+def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0):
     traces = Traces(traces_dict)
+    object_types = traces.get_object_types()
     shared_act_dict = traces.shared_act_dict
-    mergedGraphs = []
-    object_id_generator = ObjectIdGenerator(traces.get_object_types())
+    merged_graphs = []
+    object_id_generator = ObjectIdGenerator(object_types)
 
-    while traces.get_uncovered_traces():
+    # initialize counter of traces per object type
+    num_traces_per_obj_type = {obj_type: 0 for obj_type in object_types}
+
+    while traces.get_uncovered_traces() or \
+            sum([len(graph.trace_paths) for graph in merged_graphs]) < min_traces or \
+            False in [num > min_traces_per_obj_type for num in num_traces_per_obj_type.values()]:
+
         possible_choices = traces.get_uncovered_traces()
-        chosen_trace = random.choice(possible_choices)
+        if not possible_choices:
+            # in case all traces have been covered already, but we haven't achieved the min traces thresholds yet
+            enough_traces = {obj_type: num > min_traces_per_obj_type for obj_type, num in num_traces_per_obj_type.items()}
+            if False not in enough_traces.values():
+                # in case all object types have enough traces, but globally we want more
+                possible_choices = list(traces.get_all_traces())
+            else:
+                # in case we need more traces for a given object type, select a trace associated to that object type
+                obj_type = random.choice([ot for ot, v in enough_traces.items() if not v])
+                possible_choices = [trace_id for trace_id in traces.get_traces_for_object_type(obj_type)]
+
+        chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
         chosen_trace.covered = True
 
         graph = MergedTraceGraph(shared_act_dict)
@@ -255,7 +280,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
                     break
 
                 possible_choices = traces.get_traces_suitable_for_merging(missing_object)
-                next_trace = random.choice(possible_choices)
+                next_trace = traces.get_trace_by_id(random.choice(possible_choices))
                 next_trace.covered = True
                 new_object_id = object_id_generator.get_new_id(next_trace.object_type)
                 graph.add_trace(next_trace.object_type, next_trace.sequence, next_trace.id, new_object_id)
@@ -270,7 +295,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
             # after max_retries times, we pick the one with the least number of violations
             graph.unset_covered_traces(traces)
             possible_choices = traces.get_uncovered_traces()
-            chosen_trace = random.choice(possible_choices)
+            chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
             chosen_trace.covered = True
 
             graph = MergedTraceGraph(shared_act_dict)
@@ -278,7 +303,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
             graph.add_trace(chosen_trace.object_type, chosen_trace.sequence, chosen_trace.id, new_object_id)
 
         if all_shared_activities_matched:
-            mergedGraphs.append(graph)
+            merged_graphs.append(graph)
         else:
             graph.unset_covered_traces(traces)
             # pick the graph with the fewest number of unmatched shared activities
@@ -287,9 +312,13 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
                                               if v != set()])
                            )[0]
             graph.set_covered_traces(traces)
-            mergedGraphs.append(graph)
+            merged_graphs.append(graph)
 
-    return mergedGraphs
+        # keep count of number of traces per object type
+        for trace_id in graph.trace_paths.keys():
+            num_traces_per_obj_type[traces.get_object_type_of_trace(trace_id)] += 1
+
+    return merged_graphs
 
 
 def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_stepsize):
@@ -341,7 +370,7 @@ def get_parameters(parameter_path):
     params = []
     for i in range(len(data)):
         p = data[i]
-        if i == 6:
+        if i == 8:
             p = p.split(",")
             p = datetime(int(p[0]), int(p[1]), int(p[2]))
         else:
@@ -356,12 +385,14 @@ if __name__ == '__main__':
     # max_cycles:  max number of cycles until aborting when simulating model
     # ignore_self_loops: whether to ignore self loops when simulating model (0 or 1)
     # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements
-    #                                                                   (this can lead to longer replay times)
+    #                         (this can lead to longer replay times), if this is true, usage of cycles will be avoided
 
     # Merging parameters
     # max_iterations: max traces to combine when merging different object type's traces
     # max_retries: max number of tries we restart the merging of traces (in case, there still are unmatched shared
     #                                       activities after, we pick the one with the fewest unmatched activities)
+    # min_traces: minimum number of traces across all object types that should be generated
+    # min_traces_per_obj_type: minimum number of traces per object type
 
     # Log generation parameters
     # start_date: start date of first event in log (YYYY, M, D)
@@ -379,7 +410,7 @@ if __name__ == '__main__':
         parameter_path = args[3]
 
     max_trace_length, max_cycles, ignore_self_loops, minimize_for_node_coverage, \
-        max_iterations, max_retries, \
+        max_iterations, max_retries, min_traces, min_traces_per_obj_type, \
         start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
 
     graph = pydotplus.graph_from_dot_file(input_path).to_string()
@@ -400,10 +431,15 @@ if __name__ == '__main__':
         simulation.start_simulation()
         traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=ignore_self_loops)
 
+    # filter out objects without any traces
+    traces = {ot: v for ot, v in traces.items() if v}
+
     # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
     merged_graphs = combine_object_types(traces,
                                          max_iterations=max_iterations,
-                                         max_retries=max_retries)
+                                         max_retries=max_retries,
+                                         min_traces=min_traces,
+                                         min_traces_per_obj_type=min_traces_per_obj_type)
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
     dataframe = convert_to_ocel(merged_graphs, start_date=start_date,
@@ -424,3 +460,7 @@ if __name__ == '__main__':
         df.to_csv(output_path + "/" + ot + ".csv", index=False)
 
     print(sum([len(df) for df in flattened_logs.values()]), "events after flattening")
+    print(sum([len(df["traceid"].unique()) for df in flattened_logs.values()]), "traces after flattening")
+
+    for ot, df in flattened_logs.items():
+        print(ot, len(df["traceid"].unique()))

@@ -1,16 +1,18 @@
-100;2;0;1;50;10;2020,1,1;1;10
+100;2;0;1;50;10;0;0;2020,1,1;1;10
 
 # Replay parameters
 # max_trace_length: max supported trace length when simulating model
 # max_cycles:  max number of cycles until aborting when simulating model
 # ignore_self_loops: whether to ignore self loops when simulating model
 # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements (this can
-#                                                                                       lead to longer replay times)
+#                            (this can lead to longer replay times), if this is true, usage of cycles will be avoided
 
 # Merging parameters
 # max_iterations: max traces to combine when merging different object type's traces
 # max_retries: max number of tries we restart the merging of traces (in case, there still are unmatched shared
 #                                       activities after, we pick the one with the fewest unmatched activities)
+# min_traces: minimum number of traces across all object types that should be generated
+# min_traces_per_obj_type: minimum number of traces per object type
 
 # Log generation parameters
 # start_date: start date of first event in log
