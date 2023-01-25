@@ -399,8 +399,8 @@ if __name__ == '__main__':
     # max_cycles:  max number of cycles until aborting when simulating model. This does not only include activity
     #                cycles, but all cycles in model. To achieve complete node coverage XOR cycles might be required.
     # ignore_self_loops: whether to ignore self loops when simulating model (0 or 1)
-    # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements
-    #                         (this can lead to longer replay times), if this is true, usage of cycles will be avoided
+    # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements so except
+    #                for loops (this can lead to longer replay times), if this is true, usage of cycles will be avoided
 
     # Merging parameters
     # max_iterations: max traces to combine when merging different object type's traces
