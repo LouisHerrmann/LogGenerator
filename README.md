@@ -13,4 +13,4 @@ Functionality:
  4. To combine the various traces generated from the flattened BPMN models, we build partial order graphs where we merge traces of different object types based on shared activities
  5. During merging of traces, we try to minimize the number of unmatched shared activities
  6. The partial order graphs are converted into an OCEL format. This is also the step where we assign timestamps to the events
- 7. Finally, the OCEL is flattened for each object type and a csv log file is generated
+ 7. Finally, the OCEL is flattened for each object type and the csv log files are generated
