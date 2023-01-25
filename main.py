@@ -214,6 +214,8 @@ class Traces:
             possible_traces = list(self.get_all_traces())
         return possible_traces
 
+    def get_trace_sequence_by_id(self, id):
+        return self.get_trace_by_id(id).sequence
 
 class Trace:
     def __init__(self, sequence, object_type, id):
@@ -234,7 +236,7 @@ class ObjectIdGenerator:
         return new_id
 
 
-def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0):
+def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0, min_events_per_obj_type=0):
     traces = Traces(traces_dict)
     object_types = traces.get_object_types()
     shared_act_dict = traces.shared_act_dict
@@ -243,22 +245,31 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
 
     # initialize counter of traces per object type
     num_traces_per_obj_type = {obj_type: 0 for obj_type in object_types}
+    num_events_per_obj_type = {obj_type: 0 for obj_type in object_types}
 
     while traces.get_uncovered_traces() or \
             sum([len(graph.trace_paths) for graph in merged_graphs]) < min_traces or \
-            False in [num > min_traces_per_obj_type for num in num_traces_per_obj_type.values()]:
+            False in [num > min_traces_per_obj_type for num in num_traces_per_obj_type.values()] or \
+            False in [num > min_events_per_obj_type for num in num_events_per_obj_type.values()]:
 
         possible_choices = traces.get_uncovered_traces()
         if not possible_choices:
             # in case all traces have been covered already, but we haven't achieved the min traces thresholds yet
-            enough_traces = {obj_type: num > min_traces_per_obj_type for obj_type, num in num_traces_per_obj_type.items()}
-            if False not in enough_traces.values():
-                # in case all object types have enough traces, but globally we want more
-                possible_choices = list(traces.get_all_traces())
-            else:
+            enough_events = {obj_type: num > min_events_per_obj_type for obj_type, num in
+                             num_events_per_obj_type.items()}
+            enough_traces = {obj_type: num > min_traces_per_obj_type for obj_type, num in
+                             num_traces_per_obj_type.items()}
+            if False in enough_traces.values():
                 # in case we need more traces for a given object type, select a trace associated to that object type
                 obj_type = random.choice([ot for ot, v in enough_traces.items() if not v])
                 possible_choices = [trace_id for trace_id in traces.get_traces_for_object_type(obj_type)]
+            elif False in enough_events.values():
+                # in case we need more events for a given object type, select a trace associated to that object type
+                obj_type = random.choice([ot for ot, v in enough_events.items() if not v])
+                possible_choices = [trace_id for trace_id in traces.get_traces_for_object_type(obj_type)]
+            else:
+                # in case all object types have enough traces, but globally we want more
+                possible_choices = list(traces.get_all_traces())
 
         chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
         chosen_trace.covered = True
@@ -314,9 +325,11 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
             graph.set_covered_traces(traces)
             merged_graphs.append(graph)
 
-        # keep count of number of traces per object type
+        # keep count of number of traces and events per object type
         for trace_id in graph.trace_paths.keys():
-            num_traces_per_obj_type[traces.get_object_type_of_trace(trace_id)] += 1
+            obj_type = traces.get_object_type_of_trace(trace_id)
+            num_traces_per_obj_type[obj_type] += 1
+            num_events_per_obj_type[obj_type] += len(traces.get_trace_sequence_by_id(trace_id))
 
     return merged_graphs
 
@@ -352,7 +365,7 @@ def flatten_OCEL(dataframe):
     flattened_logs = {}
     object_types = set(dataframe.columns).difference(["activity", "end_time"])
     for ot in object_types:
-        df_ot = dataframe.drop(columns=object_types.difference(ot)).dropna()
+        df_ot = dataframe.drop(columns=object_types.difference({ot})).dropna()
         # convert list of single object name into just object name
         df_ot[ot] = df_ot[ot].apply(lambda x: x[0])
         # change column names and order
@@ -370,7 +383,7 @@ def get_parameters(parameter_path):
     params = []
     for i in range(len(data)):
         p = data[i]
-        if i == 8:
+        if i == 9:
             p = p.split(",")
             p = datetime(int(p[0]), int(p[1]), int(p[2]))
         else:
@@ -383,6 +396,8 @@ if __name__ == '__main__':
     # Replay parameters
     # max_trace_length: max supported trace length when simulating model
     # max_cycles:  max number of cycles until aborting when simulating model
+    # max_cycles:  max number of cycles until aborting when simulating model. This does not only include activity
+    #                cycles, but all cycles in model. To achieve complete node coverage XOR cycles might be required.
     # ignore_self_loops: whether to ignore self loops when simulating model (0 or 1)
     # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements
     #                         (this can lead to longer replay times), if this is true, usage of cycles will be avoided
@@ -393,6 +408,7 @@ if __name__ == '__main__':
     #                                       activities after, we pick the one with the fewest unmatched activities)
     # min_traces: minimum number of traces across all object types that should be generated
     # min_traces_per_obj_type: minimum number of traces per object type
+    # min_events_per_obj_type: minimum number of events per object type
 
     # Log generation parameters
     # start_date: start date of first event in log (YYYY, M, D)
@@ -410,7 +426,7 @@ if __name__ == '__main__':
         parameter_path = args[3]
 
     max_trace_length, max_cycles, ignore_self_loops, minimize_for_node_coverage, \
-        max_iterations, max_retries, min_traces, min_traces_per_obj_type, \
+        max_iterations, max_retries, min_traces, min_traces_per_obj_type, min_events_per_obj_type, \
         start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
 
     graph = pydotplus.graph_from_dot_file(input_path).to_string()
@@ -439,7 +455,8 @@ if __name__ == '__main__':
                                          max_iterations=max_iterations,
                                          max_retries=max_retries,
                                          min_traces=min_traces,
-                                         min_traces_per_obj_type=min_traces_per_obj_type)
+                                         min_traces_per_obj_type=min_traces_per_obj_type,
+                                         min_events_per_obj_type=min_events_per_obj_type)
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
     dataframe = convert_to_ocel(merged_graphs, start_date=start_date,
@@ -452,15 +469,18 @@ if __name__ == '__main__':
         unmatched_events += graph.number_of_unmatched_events()
     print("Number of unmatched events:", unmatched_events)
 
-    print(len(dataframe), "events were generated")
+    print(len(dataframe), "object-centric events were generated")
+
+    print("After flattening:")
 
     # flatten dataframe for each object type and save as csv
     flattened_logs = flatten_OCEL(dataframe)
     for ot, df in flattened_logs.items():
         df.to_csv(output_path + "/" + ot + ".csv", index=False)
 
-    print(sum([len(df) for df in flattened_logs.values()]), "events after flattening")
-    print(sum([len(df["traceid"].unique()) for df in flattened_logs.values()]), "traces after flattening")
+        print("# traces for", ot, ":", len(df["traceid"].unique()))
+        print("# events for", ot, ":", len(df))
+        print("------------------------------")
 
-    for ot, df in flattened_logs.items():
-        print(ot, len(df["traceid"].unique()))
+    print(sum([len(df["traceid"].unique()) for df in flattened_logs.values()]), "traces in total after flattening")
+    print(sum([len(df) for df in flattened_logs.values()]), "events in total after flattening")
