@@ -191,6 +191,7 @@ class Traces:
 
     def get_object_type_of_trace(self, id):
         return self.get_trace_by_id(id).object_type
+
     def get_all_traces(self):
         return self.traces_dict_by_id.keys()
 
@@ -217,6 +218,7 @@ class Traces:
     def get_trace_sequence_by_id(self, id):
         return self.get_trace_by_id(id).sequence
 
+
 class Trace:
     def __init__(self, sequence, object_type, id):
         self.sequence = sequence
@@ -236,7 +238,8 @@ class ObjectIdGenerator:
         return new_id
 
 
-def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0, min_events_per_obj_type=0):
+def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0,
+                         min_events_per_obj_type=0):
     traces = Traces(traces_dict)
     object_types = traces.get_object_types()
     shared_act_dict = traces.shared_act_dict
@@ -247,6 +250,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
     num_traces_per_obj_type = {obj_type: 0 for obj_type in object_types}
     num_events_per_obj_type = {obj_type: 0 for obj_type in object_types}
 
+    # continue merging traces until all have been covered and all minimum number thresholds have been achieved
     while traces.get_uncovered_traces() or \
             sum([len(graph.trace_paths) for graph in merged_graphs]) < min_traces or \
             False in [num > min_traces_per_obj_type for num in num_traces_per_obj_type.values()] or \
@@ -271,9 +275,9 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
                 # in case all object types have enough traces, but globally we want more
                 possible_choices = list(traces.get_all_traces())
 
+        # create new merging graph and initialize with first chosen trace
         chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
         chosen_trace.covered = True
-
         graph = MergedTraceGraph(shared_act_dict)
         new_object_id = object_id_generator.get_new_id(chosen_trace.object_type)
         graph.add_trace(chosen_trace.object_type, chosen_trace.sequence, chosen_trace.id, new_object_id)
@@ -290,6 +294,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
                     all_shared_activities_matched = True
                     break
 
+                # choose next trace based on missing objects in existing merge graph
                 possible_choices = traces.get_traces_suitable_for_merging(missing_object)
                 next_trace = traces.get_trace_by_id(random.choice(possible_choices))
                 next_trace.covered = True
@@ -298,6 +303,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
 
             graph_per_reset[j] = graph
 
+            # check whether after merging, all shared activities have been matched
             if graph.get_first_missing_object_type() is None:
                 all_shared_activities_matched = True
                 break
