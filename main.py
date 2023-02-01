@@ -1,7 +1,6 @@
+import math
 import random
-
 import networkx as nx
-
 from replayer import *
 from datetime import timedelta, datetime
 import pandas as pd
@@ -259,6 +258,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
     # initialize counter of traces per object type
     num_traces_per_obj_type = {obj_type: 0 for obj_type in object_types}
     num_events_per_obj_type = {obj_type: 0 for obj_type in object_types}
+    sort_by_unmatched_events = []
 
     # continue merging traces until all have been covered and all minimum number thresholds have been achieved
     while traces.get_uncovered_traces() or \
@@ -289,7 +289,24 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
         graph_per_reset = {}
         all_shared_activities_matched = False
 
+        if not traces.get_uncovered_traces() and random.uniform(0, 1) < 0.8:
+            # in case all traces have been covered already, we simply duplicate some of existing merge graphs
+            # until min trace / event thresholds have been achieved. To add some variability we only do this 80% of time
+            possible_graphs = [graph for graph in merged_graphs
+                               if set(graph.trace_paths.keys()).intersection(possible_choices)]
+            if possible_graphs:
+                # get rid of previously duplicated graphs and sort by number of unmatched events (if there are new ones)
+                if len(set(merged_graphs)) > len(sort_by_unmatched_events):
+                    sort_by_unmatched_events = sorted(list(set(possible_graphs)), key=lambda g: g.number_of_unmatched_events())
+                    # randomly select from 30% of best merge graphs generated so far
+                    sort_by_unmatched_events = sort_by_unmatched_events[:math.ceil(0.3 * len(sort_by_unmatched_events))]
+
+                graph = random.choice(sort_by_unmatched_events)
+                all_shared_activities_matched = True
+
         for j in range(max_retries):
+            if all_shared_activities_matched:
+                break
 
             # create new merging graph and initialize with first chosen trace
             possible_choices = original_choices
@@ -431,8 +448,8 @@ if __name__ == '__main__':
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
-        input_path = "benchmarkLogs/1000/3/example.dot"
-        output_path = "benchmarkLogs/1000/3"
+        input_path = "benchmarkLogs/1000/4/example.dot"
+        output_path = "benchmarkLogs/1000/4"
     else:
         input_path = args[1]
         output_path = args[2]
