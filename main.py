@@ -448,8 +448,8 @@ if __name__ == '__main__':
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
-        input_path = "benchmarkLogs/1000/4/example.dot"
-        output_path = "benchmarkLogs/1000/4"
+        input_path = "benchmarkLogs/1000/8/example.dot"
+        output_path = "benchmarkLogs/1000/8"
     else:
         input_path = args[1]
         output_path = args[2]
