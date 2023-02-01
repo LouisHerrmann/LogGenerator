@@ -238,6 +238,13 @@ class ObjectIdGenerator:
         return new_id
 
 
+def select_and_add_trace_to_graph(possible_choices, traces, object_id_generator, graph):
+    chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
+    chosen_trace.covered = True
+    new_object_id = object_id_generator.get_new_id(chosen_trace.object_type)
+    graph.add_trace(chosen_trace.object_type, chosen_trace.sequence, chosen_trace.id, new_object_id)
+
+
 def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0,
                          min_events_per_obj_type=0):
     traces = Traces(traces_dict)
@@ -275,16 +282,16 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
                 # in case all object types have enough traces, but globally we want more
                 possible_choices = list(traces.get_all_traces())
 
-        # create new merging graph and initialize with first chosen trace
-        chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
-        chosen_trace.covered = True
-        graph = MergedTraceGraph(shared_act_dict)
-        new_object_id = object_id_generator.get_new_id(chosen_trace.object_type)
-        graph.add_trace(chosen_trace.object_type, chosen_trace.sequence, chosen_trace.id, new_object_id)
-
+        original_choices = possible_choices
         graph_per_reset = {}
         all_shared_activities_matched = False
+
         for j in range(max_retries):
+
+            # create new merging graph and initialize with first chosen trace
+            possible_choices = original_choices
+            graph = MergedTraceGraph(shared_act_dict)
+            select_and_add_trace_to_graph(possible_choices, traces, object_id_generator, graph)
 
             # build graph out of traces by randomly picking from the uncovered traces and matching shared activities
             for i in range(max_iterations):
@@ -296,12 +303,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
 
                 # choose next trace based on missing objects in existing merge graph
                 possible_choices = traces.get_traces_suitable_for_merging(missing_object)
-                next_trace = traces.get_trace_by_id(random.choice(possible_choices))
-                next_trace.covered = True
-                new_object_id = object_id_generator.get_new_id(next_trace.object_type)
-                graph.add_trace(next_trace.object_type, next_trace.sequence, next_trace.id, new_object_id)
-
-            graph_per_reset[j] = graph
+                select_and_add_trace_to_graph(possible_choices, traces, object_id_generator, graph)
 
             # check whether after merging, all shared activities have been matched
             if graph.get_first_missing_object_type() is None:
@@ -310,14 +312,8 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
 
             # in case we did not manage to match all shared activities, reset and try again
             # after max_retries times, we pick the one with the least number of violations
+            graph_per_reset[j] = graph
             graph.unset_covered_traces(traces)
-            possible_choices = traces.get_uncovered_traces()
-            chosen_trace = traces.get_trace_by_id(random.choice(possible_choices))
-            chosen_trace.covered = True
-
-            graph = MergedTraceGraph(shared_act_dict)
-            new_object_id = object_id_generator.get_new_id(chosen_trace.object_type)
-            graph.add_trace(chosen_trace.object_type, chosen_trace.sequence, chosen_trace.id, new_object_id)
 
         if all_shared_activities_matched:
             merged_graphs.append(graph)
@@ -330,6 +326,11 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
                            )[0]
             graph.set_covered_traces(traces)
             merged_graphs.append(graph)
+
+        # ensure all merged traces are marked as covered
+        for graph in merged_graphs:
+            for trace_id in graph.trace_paths.keys():
+                traces.get_trace_by_id(trace_id).covered = True
 
         # keep count of number of traces and events per object type
         for trace_id in graph.trace_paths.keys():
