@@ -1,4 +1,7 @@
 import random
+
+import networkx as nx
+
 from replayer import *
 from datetime import timedelta, datetime
 import pandas as pd
@@ -427,6 +430,9 @@ if __name__ == '__main__':
         input_path = "input/example.dot"
         output_path = "output"
         parameter_path = "parameters/config.txt"
+
+        input_path = "benchmarkLogs/1000/3/example.dot"
+        output_path = "benchmarkLogs/1000/3"
     else:
         input_path = args[1]
         output_path = args[2]
@@ -439,6 +445,15 @@ if __name__ == '__main__':
     graph = pydotplus.graph_from_dot_file(input_path).to_string()
 
     G, object_types = create_graph(graph)
+
+    print("Understandability of graph")
+    print("# nodes:", len(G.nodes))
+    print("# edges:", len(G.edges))
+    print("Avg node connectivity:", round(nx.average_node_connectivity(G), 3))
+    print("# simple cycles:", len(list(nx.simple_cycles(G))))
+    print("# XOR nodes:", len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"']))
+    print("------------------------------")
+
     graphs = {}
     traces = {}
     for ot in object_types:
@@ -491,3 +506,18 @@ if __name__ == '__main__':
 
     print(sum([len(df["traceid"].unique()) for df in flattened_logs.values()]), "traces in total after flattening")
     print(sum([len(df) for df in flattened_logs.values()]), "events in total after flattening")
+
+    # write output settings to textfile
+    f = open(output_path + "/output_results.txt", "w+")
+    f.write("Understandability of graph\n# nodes: " + str(len(G.nodes)) + "\n# edges: " + str(len(G.edges)))
+    f.write("\nAvg node connectivity: " + str(round(nx.average_node_connectivity(G), 3)))
+    f.write("\n# simple cycles:" + str(len(list(nx.simple_cycles(G)))))
+    XOR_nodes = len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"'])
+    f.write("\n# XOR nodes :" + str(XOR_nodes))
+    f.write("\n------------------------------")
+    f.write("\nNumber of unmatched events: " + str(unmatched_events))
+    for ot, df in flattened_logs.items():
+        f.write("\n------------------------------")
+        f.write("\n# traces for " + str(ot) + ": " + str(len(df["traceid"].unique())))
+        f.write("\n# events for " + str(ot) + ": " + str(len(df)))
+    f.close()
