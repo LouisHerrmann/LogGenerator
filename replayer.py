@@ -172,6 +172,7 @@ class TraceSimulation:
         if self.graph.nodes.get(next_node_id)["act_name"] == '"BPMN_EXCLUSIVE_CHOICE"':
             # if decision point, duplicate trace, update markings, and play again
             next_markings = self.get_next_markings_for_xor(next_node_id)
+
             for next_marking in next_markings[:-1]:
                 new_trace = self.simulation.duplicate_trace(self.id)
                 new_trace.marking = next_marking
