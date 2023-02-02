@@ -448,8 +448,8 @@ if __name__ == '__main__':
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
-    #    input_path = "benchmarkLogs/1000/9/example.dot"
-    #    output_path = "benchmarkLogs/1000/9"
+        input_path = "benchmarkLogs/1000/5/example.dot"
+        output_path = "benchmarkLogs/1000/5"
     else:
         input_path = args[1]
         output_path = args[2]
@@ -467,6 +467,7 @@ if __name__ == '__main__':
     print("# nodes:", len(G.nodes))
     print("# edges:", len(G.edges))
     print("Avg node connectivity:", round(nx.average_node_connectivity(G), 3))
+    print("Density:", nx.density(G))
     print("# simple cycles:", len(list(nx.simple_cycles(G))))
     print("# XOR nodes:", len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"']))
     print("------------------------------")
@@ -531,10 +532,17 @@ if __name__ == '__main__':
     f.write("\n# simple cycles:" + str(len(list(nx.simple_cycles(G)))))
     XOR_nodes = len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"'])
     f.write("\n# XOR nodes :" + str(XOR_nodes))
+    f.write("\nDensity: " + str(nx.density(G)))
     f.write("\n------------------------------")
     f.write("\nNumber of unmatched events: " + str(unmatched_events))
+    f.write("\nObject-centric events: " + str(len(dataframe)))
     for ot, df in flattened_logs.items():
         f.write("\n------------------------------")
         f.write("\n# traces for " + str(ot) + ": " + str(len(df["traceid"].unique())))
         f.write("\n# events for " + str(ot) + ": " + str(len(df)))
+    f.write("\n------------------------------")
+    num_traces = sum([len(df["traceid"].unique()) for df in flattened_logs.values()])
+    f.write("\n# traces total: " + str(num_traces))
+    num_events = sum([len(df) for df in flattened_logs.values()])
+    f.write("\n# events total: " + str(num_events))
     f.close()
