@@ -448,8 +448,6 @@ if __name__ == '__main__':
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
-        input_path = "benchmarkLogs/1000/5/example.dot"
-        output_path = "benchmarkLogs/1000/5"
     else:
         input_path = args[1]
         output_path = args[2]
@@ -489,6 +487,7 @@ if __name__ == '__main__':
 
     # filter out objects without any traces
     traces = {ot: v for ot, v in traces.items() if v}
+    object_types = list(traces.keys())
 
     # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
     merged_graphs = combine_object_types(traces,
