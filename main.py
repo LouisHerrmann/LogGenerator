@@ -1,5 +1,7 @@
 import math
 import random
+import shutil
+
 import networkx as nx
 from replayer import *
 from datetime import timedelta, datetime
@@ -7,6 +9,8 @@ import pandas as pd
 import sys
 import numpy as np
 import difflib
+import glob
+import os
 
 
 class MergedTraceGraph:
@@ -444,12 +448,9 @@ if __name__ == '__main__':
 
     args = sys.argv
     if len(args) <= 1:
-        input_path = "input/example.dot"
+        input_path = "input"
         output_path = "output"
         parameter_path = "parameters/config.txt"
-
-        input_path = "benchmarkLogs/1000/5/example.dot"
-        output_path = "benchmarkLogs/1000/5"
     else:
         input_path = args[1]
         output_path = args[2]
@@ -459,90 +460,87 @@ if __name__ == '__main__':
         max_iterations, max_retries, min_traces, min_traces_per_obj_type, min_events_per_obj_type, \
         start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
 
-    graph = pydotplus.graph_from_dot_file(input_path).to_string()
+    statistics = pd.DataFrame()
 
-    G, object_types = create_graph(graph)
+    benchmark_args_string = ""
 
-    print("Understandability of graph")
-    print("# nodes:", len(G.nodes))
-    print("# edges:", len(G.edges))
-    print("Avg node connectivity:", round(nx.average_node_connectivity(G), 3))
-    print("Density:", nx.density(G))
-    print("# simple cycles:", len(list(nx.simple_cycles(G))))
-    print("# XOR nodes:", len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"']))
-    print("------------------------------")
+    for file in glob.glob(input_path + "/" + "*.dot"):
+        print(file)
+        row = {}
+        graph = pydotplus.graph_from_dot_file(file).to_string()
 
-    graphs = {}
-    traces = {}
-    for ot in object_types:
-        # flatten input model for each object type
-        graph = flatten_graph(G, ot)
-        graphs[ot] = graph
+        G, object_types = create_graph(graph)
 
-        # replay each of the flattened logs and save replayed traces
-        simulation = Simulation(graph,
-                                max_trace_length=max_trace_length,
-                                max_cycles=max_cycles,
-                                minimize_for_node_coverage=minimize_for_node_coverage)
-        simulation.start_simulation()
-        traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=ignore_self_loops)
+        row["no nodes"] = len(G.nodes)
+        row["no edges"] = len(G.edges)
+        row["avg node connectivity"] = round(nx.average_node_connectivity(G), 4)
+        row["density"] = round(nx.density(G), 4)
+        row["no simple cycles"] = len(list(nx.simple_cycles(G)))
+        row["no xor"] = len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"'])
 
-    # filter out objects without any traces
-    traces = {ot: v for ot, v in traces.items() if v}
+        graphs = {}
+        traces = {}
+        print("Flattening input graph and replaying flat logs")
+        for ot in object_types:
+            # flatten input model for each object type
+            graph = flatten_graph(G, ot)
+            graphs[ot] = graph
 
-    # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
-    merged_graphs = combine_object_types(traces,
-                                         max_iterations=max_iterations,
-                                         max_retries=max_retries,
-                                         min_traces=min_traces,
-                                         min_traces_per_obj_type=min_traces_per_obj_type,
-                                         min_events_per_obj_type=min_events_per_obj_type)
+            # replay each of the flattened logs and save replayed traces
+            simulation = Simulation(graph,
+                                    max_trace_length=max_trace_length,
+                                    max_cycles=max_cycles,
+                                    minimize_for_node_coverage=minimize_for_node_coverage)
+            simulation.start_simulation()
+            traces[ot] = simulation.get_activity_sequence_representation(ignore_self_loops=ignore_self_loops)
 
-    # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
-    dataframe = convert_to_ocel(merged_graphs, start_date=start_date,
-                                min_time_stepsize=min_time_stepsize,
-                                max_time_stepsize=max_time_stepsize)
+        # filter out objects without any traces
+        traces = {ot: v for ot, v in traces.items() if v}
 
-    # check number of unmatched shared activities (goal: 0)
-    unmatched_events = 0
-    for graph in merged_graphs:
-        unmatched_events += graph.number_of_unmatched_events()
-    print("Number of unmatched events:", unmatched_events)
+        object_types = list(traces.keys())
+        row["no object types"] = len(object_types)
 
-    print(len(dataframe), "object-centric events were generated")
+        print("Merging flat logs")
+        # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
+        merged_graphs = combine_object_types(traces,
+                                             max_iterations=max_iterations,
+                                             max_retries=max_retries,
+                                             min_traces=min_traces,
+                                             min_traces_per_obj_type=min_traces_per_obj_type,
+                                             min_events_per_obj_type=min_events_per_obj_type)
 
-    print("After flattening:")
+        # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
+        dataframe = convert_to_ocel(merged_graphs, start_date=start_date,
+                                    min_time_stepsize=min_time_stepsize,
+                                    max_time_stepsize=max_time_stepsize)
 
-    # flatten dataframe for each object type and save as csv
-    flattened_logs = flatten_OCEL(dataframe)
-    for ot, df in flattened_logs.items():
-        df.to_csv(output_path + "/" + ot + ".csv", index=False)
+        # check number of unmatched shared activities (goal: 0)
+        unmatched_events = 0
+        for graph in merged_graphs:
+            unmatched_events += graph.number_of_unmatched_events()
 
-        print("# traces for", ot, ":", len(df["traceid"].unique()))
-        print("# events for", ot, ":", len(df))
-        print("------------------------------")
+        row["no unmatched events"] = unmatched_events
+        row["no obj centric events"] = len(dataframe)
 
-    print(sum([len(df["traceid"].unique()) for df in flattened_logs.values()]), "traces in total after flattening")
-    print(sum([len(df) for df in flattened_logs.values()]), "events in total after flattening")
+        # flatten dataframe for each object type and save as csv
+        file_name = file[:-4].split("/")[-1]
+        log_dir = output_path + "/" + str(len(object_types)) + "/" + file_name
+        if os.path.exists(log_dir):
+            shutil.rmtree(log_dir)
+        os.makedirs(log_dir)
 
-    # write output settings to textfile
-    f = open(output_path + "/output_results.txt", "w+")
-    f.write("Understandability of graph\n# nodes: " + str(len(G.nodes)) + "\n# edges: " + str(len(G.edges)))
-    f.write("\nAvg node connectivity: " + str(round(nx.average_node_connectivity(G), 3)))
-    f.write("\n# simple cycles:" + str(len(list(nx.simple_cycles(G)))))
-    XOR_nodes = len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"'])
-    f.write("\n# XOR nodes :" + str(XOR_nodes))
-    f.write("\nDensity: " + str(nx.density(G)))
-    f.write("\n------------------------------")
-    f.write("\nNumber of unmatched events: " + str(unmatched_events))
-    f.write("\nObject-centric events: " + str(len(dataframe)))
-    for ot, df in flattened_logs.items():
-        f.write("\n------------------------------")
-        f.write("\n# traces for " + str(ot) + ": " + str(len(df["traceid"].unique())))
-        f.write("\n# events for " + str(ot) + ": " + str(len(df)))
-    f.write("\n------------------------------")
-    num_traces = sum([len(df["traceid"].unique()) for df in flattened_logs.values()])
-    f.write("\n# traces total: " + str(num_traces))
-    num_events = sum([len(df) for df in flattened_logs.values()])
-    f.write("\n# events total: " + str(num_events))
-    f.close()
+        benchmark_args_string += "->Args({1000, " + str(len(object_types)) + ", " + file_name + "}) \n"
+
+        print("Flattening log")
+        flattened_logs = flatten_OCEL(dataframe)
+        for ot, df in flattened_logs.items():
+            df.to_csv(log_dir + "/" + ot + ".csv", index=False)
+
+        row["no traces after flattening"] = sum([len(df["traceid"].unique()) for df in flattened_logs.values()])
+        row["no events after flattening"] = sum([len(df) for df in flattened_logs.values()])
+
+        statistics[file_name] = row
+        print("_________________________________")
+
+    statistics.T.to_csv(output_path + "/statistics.csv", index=True)
+    print(benchmark_args_string)
