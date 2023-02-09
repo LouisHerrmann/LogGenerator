@@ -218,11 +218,11 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
     merged_graphs = []
     object_id_generator = ObjectIdGenerator(object_types)
 
-    duplicate_threshold = 5 * math.prod([len(t) for t in traces_dict.values()])
+    duplicate_threshold = 10 * math.prod([len(t) for t in traces_dict.values()])
 
     # continue merging traces until all have been covered and all minimum number thresholds have been achieved
     while traces.get_uncovered_traces() or \
-        sum([len(graph.used_traces) for graph in merged_graphs]) < duplicate_threshold:
+            sum([len(graph.used_traces) for graph in merged_graphs]) < duplicate_threshold:
 
         possible_choices = traces.get_uncovered_traces()
         if not possible_choices:
@@ -327,7 +327,7 @@ def get_parameters(parameter_path):
     params = []
     for i in range(len(data)):
         p = data[i]
-        if i == 10:
+        if i == 9:
             p = p.split(",")
             p = datetime(int(p[0]), int(p[1]), int(p[2]))
         else:
@@ -336,32 +336,19 @@ def get_parameters(parameter_path):
     return params
 
 
+def get_num_unmatched_events(samples, graphs_for_sampling, rest):
+    # just for testing purposes
+    count = sum([graph.number_of_unmatched_events() for graph in graphs_for_sampling+rest])
+    for k, v in Counter(samples).items():
+        count += graphs_for_sampling[k].number_of_unmatched_events() * v
+    return count
+
+
 if __name__ == '__main__':
-    # Replay parameters
-    # max_trace_length: max supported trace length when simulating model
-    # max_cycles:  max number of cycles until aborting when simulating model
-    # max_cycles:  max number of cycles until aborting when simulating model. This does not only include activity
-    #                cycles, but all cycles in model. To achieve complete node coverage XOR cycles might be required.
-    # ignore_self_loops: whether to ignore self loops when simulating model (0 or 1)
-    # minimize_for_node_coverage: if this is false, we achieve path coverage under the parameter requirements so except
-    #                for loops (this can lead to longer replay times), if this is true, usage of cycles will be avoided
-
-    # Merging parameters
-    # max_iterations: max traces to combine when merging different object type's traces
-    # max_retries: max number of tries we restart the merging of traces (in case, there still are unmatched shared
-    #                                       activities after, we pick the one with the fewest unmatched activities)
-    # min_traces: minimum number of traces across all object types that should be generated
-    # min_traces_per_obj_type: minimum number of traces per object type
-    # min_events_per_obj_type: minimum number of events per object type
-
-    # Log generation parameters
-    # start_date: start date of first event in log (YYYY, M, D)
-    # min_time_stepsize: min time between events in hours
-    # max_time_stepsize: max time between events in hours
 
     args = sys.argv
     if len(args) <= 1:
-        input_path = "input/sameModelMoreObj/2.dot"
+        input_path = "input/allInputs/10.dot"
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
@@ -371,7 +358,7 @@ if __name__ == '__main__':
         parameter_path = args[3]
 
     max_trace_length, max_cycles, ignore_self_loops, minimize_for_node_coverage, \
-        max_iterations, max_retries, min_traces, min_traces_per_obj_type, min_events_per_obj_type, distribution, \
+        max_iterations, max_retries, num_traces, distribution, probability, \
         start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
 
     graph = pydotplus.graph_from_dot_file(input_path).to_string()
@@ -384,7 +371,8 @@ if __name__ == '__main__':
     print("Avg node connectivity:", round(nx.average_node_connectivity(G), 3))
     print("Density:", nx.density(G))
     print("# simple cycles:", len(list(nx.simple_cycles(G))))
-    print("# XOR nodes:", len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"']))
+    print("# XOR nodes:",
+          len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"']))
     print("------------------------------")
 
     graphs = {}
@@ -411,10 +399,20 @@ if __name__ == '__main__':
                                          max_iterations=max_iterations,
                                          max_retries=max_retries)
 
+    # remove graphs with same trace paths
     merged_graphs = filter_out_duplicates(merged_graphs)
-    dataframes = [graph.convert_to_dataframe() for graph in merged_graphs]
-    dataframes = create_distribution(dataframes, min_traces, Dist(distribution), 0.6,
-                                     min_traces_per_obj_type, min_events_per_obj_type)
+    # in case we have graphs with unmatched events, we prefer duplicating perfectly matching ones if there are enough
+    graphs_for_sampling, rest = determine_graphs_for_sampling(merged_graphs)
+
+    # calculate median number of traces for merged graphs to estimate the number of graphs to duplicate
+    # when creating desired distribution
+    median_traces_per_graph = np.median([len(graph.trace_paths) for graph in graphs_for_sampling])
+    # convert merged graphs to dataframes
+    dataframes = [graph.convert_to_dataframe() for graph in graphs_for_sampling]
+    # duplicate dataframes to achieve specified distribution
+    dataframes, samples = create_distribution(dataframes, num_traces, median_traces_per_graph,
+                                     Dist(distribution), probability / 100)
+    dataframes += [graph.convert_to_dataframe() for graph in rest]
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
     dataframe = convert_to_ocel(dataframes, start_date=start_date,
@@ -425,7 +423,8 @@ if __name__ == '__main__':
     unmatched_events = 0
     for graph in merged_graphs:
         unmatched_events += graph.number_of_unmatched_events()
-    print("Number of unmatched events:", unmatched_events)
+    print("Number of unmatched events (before duplication):", unmatched_events)
+    print("After duplication:", get_num_unmatched_events(samples, graphs_for_sampling, rest))
 
     print(len(dataframe), "object-centric events were generated")
 

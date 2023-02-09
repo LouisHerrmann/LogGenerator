@@ -1,4 +1,4 @@
-100;3;1;1;35;35;1000;0;0;0;2020,1,1;1;10
+100;3;1;1;40;40;10000;2;60;2020,1,1;1;10
 
 # Replay parameters
 # max_trace_length: max supported trace length when simulating model
@@ -12,10 +12,10 @@
 # max_iterations: max traces to combine when merging different object type's traces
 # max_retries: max number of tries we restart the merging of traces (in case, there still are unmatched shared
 #                                       activities after, we pick the one with the fewest unmatched activities)
-# min_traces: minimum number of traces across all object types that should be generated
-# min_traces_per_obj_type: minimum number of traces per object type
-# min_events_per_obj_type: minimum number of events per object type
+# num_traces: approximate number of traces across all object types that should be generated (multiply by number
+#                                        of objects to get an average minimum per object type)
 # distribution: 0 -> UNIFORM, 1 -> BINOMIAL, 2 -> GEOMETRIC
+# probability: for BINOMIAL / GEOMETRIC distribution, this determines p, value is given in percentage (i.e. 60 is 0.6)
 
 # Log generation parameters
 # start_date: start date of first event in log
