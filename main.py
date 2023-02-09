@@ -7,6 +7,7 @@ import pandas as pd
 import sys
 import numpy as np
 import difflib
+from probabilityDistributionCreator import *
 
 
 class MergedTraceGraph:
@@ -137,45 +138,6 @@ class MergedTraceGraph:
         return pd.DataFrame(rows)
 
 
-"""
-    def calc_matching_score(self, trace):
-        ot = trace.object_type
-        filtered_trace_sequence = trace.sequence # [act for act in trace.sequence if len(self.shared_act_dict[act]) > 1]
-        topological_order = [node for node in list(nx.topological_sort(self.graph))]
-        filtered_top_node_order = [node for node in topological_order
-                                                                if ot in self.missing_objects[node]]
-        filtered_top_act_order = [self.get_node_activity(node) for node in filtered_top_node_order]
-
-        seq = difflib.SequenceMatcher(None, filtered_top_act_order, filtered_trace_sequence)
-        matching = []
-        for block in seq.get_matching_blocks():
-            if block.size > 0:
-                for i in range(block.size):
-                    matching.append((filtered_top_node_order[block.a + i], block.b+i))
-
-        return seq.ratio(), matching
-
-
-    def find_trace_with_most_matching_activities(self, traces):
-        # finds the trace that minimizes the number of open activities that still need matching after merge
-        # i.e. if we have two traces t1, t2 with activities T1, M, T2 where M are the matching activities and T1, T2 the
-        # remaining unmatched ones, we want to minimize |T1| + |T2|
-        max_trace = None
-        max_score = 0
-        max_matching = None
-        for trace in traces:
-            score, matching = self.calc_matching_score(trace)
-            if score >= max_score:
-                max_trace = trace
-                max_score, max_matching = score, matching
-
-        if max_score >= 1:
-            return trace #, max_matching
-        else:
-            return False
-"""
-
-
 class Traces:
     def __init__(self, traces_dict):
         self.traces_dict_by_id = {}
@@ -249,67 +211,29 @@ def select_and_add_trace_to_graph(possible_choices, traces, object_id_generator,
     graph.add_trace(chosen_trace.object_type, chosen_trace.sequence, chosen_trace.id, new_object_id)
 
 
-def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=0, min_traces_per_obj_type=0,
-                         min_events_per_obj_type=0):
+def combine_object_types(traces_dict, max_iterations, max_retries=5):
     traces = Traces(traces_dict)
     object_types = traces.get_object_types()
     shared_act_dict = traces.shared_act_dict
     merged_graphs = []
     object_id_generator = ObjectIdGenerator(object_types)
 
-    # initialize counter of traces per object type
-    num_traces_per_obj_type = {obj_type: 0 for obj_type in object_types}
-    num_events_per_obj_type = {obj_type: 0 for obj_type in object_types}
-    sort_by_unmatched_events = []
+    duplicate_threshold = 5 * math.prod([len(t) for t in traces_dict.values()])
 
     # continue merging traces until all have been covered and all minimum number thresholds have been achieved
     while traces.get_uncovered_traces() or \
-            sum([len(graph.used_traces) for graph in merged_graphs]) < min_traces or \
-            False in [num >= min_traces_per_obj_type for num in num_traces_per_obj_type.values()] or \
-            False in [num >= min_events_per_obj_type for num in num_events_per_obj_type.values()]:
+        sum([len(graph.used_traces) for graph in merged_graphs]) < duplicate_threshold:
 
         possible_choices = traces.get_uncovered_traces()
         if not possible_choices:
-            # in case all traces have been covered already, but we haven't achieved the min traces thresholds yet
-            enough_events = {obj_type: num > min_events_per_obj_type for obj_type, num in
-                             num_events_per_obj_type.items()}
-            enough_traces = {obj_type: num > min_traces_per_obj_type for obj_type, num in
-                             num_traces_per_obj_type.items()}
-            if False in enough_traces.values():
-                # in case we need more traces for a given object type, select a trace associated to that object type
-                obj_type = random.choice([ot for ot, v in enough_traces.items() if not v])
-                possible_choices = [trace_id for trace_id in traces.get_traces_for_object_type(obj_type)]
-            elif False in enough_events.values():
-                # in case we need more events for a given object type, select a trace associated to that object type
-                obj_type = random.choice([ot for ot, v in enough_events.items() if not v])
-                possible_choices = [trace_id for trace_id in traces.get_traces_for_object_type(obj_type)]
-            else:
-                # in case all object types have enough traces, but globally we want more
-                possible_choices = list(traces.get_all_traces())
+            # in case all object types have enough traces, but we want more
+            possible_choices = list(traces.get_all_traces())
 
         original_choices = possible_choices
         graph_per_reset = {}
         all_shared_activities_matched = False
 
-        if not traces.get_uncovered_traces() and random.uniform(0, 1) < 0.8:
-            # in case all traces have been covered already, we simply duplicate some of existing merge graphs
-            # until min trace / event thresholds have been achieved. To add some variability we only do this 80% of time
-            possible_graphs = [graph for graph in merged_graphs
-                               if set(graph.used_traces).intersection(possible_choices)]
-            if possible_graphs:
-                # get rid of previously duplicated graphs and sort by number of unmatched events (if there are new ones)
-                if len(set(merged_graphs)) > len(sort_by_unmatched_events):
-                    sort_by_unmatched_events = sorted(list(set(possible_graphs)), key=lambda g: g.number_of_unmatched_events())
-                    # randomly select from 30% of best merge graphs generated so far
-                    sort_by_unmatched_events = sort_by_unmatched_events[:math.ceil(0.3 * len(sort_by_unmatched_events))]
-
-                graph = random.choice(sort_by_unmatched_events)
-                all_shared_activities_matched = True
-
         for j in range(max_retries):
-            if all_shared_activities_matched:
-                break
-
             # create new merging graph and initialize with first chosen trace
             possible_choices = original_choices
             graph = MergedTraceGraph(shared_act_dict)
@@ -354,20 +278,11 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
             for trace_id in set(graph.used_traces):
                 traces.get_trace_by_id(trace_id).covered = True
 
-        # keep count of number of traces and events per object type
-        for trace_id in graph.used_traces:
-            obj_type = traces.get_object_type_of_trace(trace_id)
-            num_traces_per_obj_type[obj_type] += 1
-            num_events_per_obj_type[obj_type] += len(traces.get_trace_sequence_by_id(trace_id))
-
     return merged_graphs
 
 
-def convert_to_ocel(merged_graphs, start_date, min_time_stepsize, max_time_stepsize):
+def convert_to_ocel(dataframes, start_date, min_time_stepsize, max_time_stepsize):
     # stepsizes in hours
-    # convert each graph to a dataframe
-    dataframes = [graph.convert_to_dataframe() for graph in merged_graphs]
-
     # randomly assign timestamps to events of each dataframe according to passed stepsize
     for index, df in enumerate(dataframes):
         date = start_date
@@ -412,7 +327,7 @@ def get_parameters(parameter_path):
     params = []
     for i in range(len(data)):
         p = data[i]
-        if i == 9:
+        if i == 10:
             p = p.split(",")
             p = datetime(int(p[0]), int(p[1]), int(p[2]))
         else:
@@ -446,7 +361,7 @@ if __name__ == '__main__':
 
     args = sys.argv
     if len(args) <= 1:
-        input_path = "input/sameModelMoreObj/1.dot"
+        input_path = "input/sameModelMoreObj/2.dot"
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
@@ -456,7 +371,7 @@ if __name__ == '__main__':
         parameter_path = args[3]
 
     max_trace_length, max_cycles, ignore_self_loops, minimize_for_node_coverage, \
-        max_iterations, max_retries, min_traces, min_traces_per_obj_type, min_events_per_obj_type, \
+        max_iterations, max_retries, min_traces, min_traces_per_obj_type, min_events_per_obj_type, distribution, \
         start_date, min_time_stepsize, max_time_stepsize = get_parameters(parameter_path)
 
     graph = pydotplus.graph_from_dot_file(input_path).to_string()
@@ -494,13 +409,15 @@ if __name__ == '__main__':
     # combine all the replayed traces to partial order graphs covering all traces (merging on shared activities)
     merged_graphs = combine_object_types(traces,
                                          max_iterations=max_iterations,
-                                         max_retries=max_retries,
-                                         min_traces=min_traces,
-                                         min_traces_per_obj_type=min_traces_per_obj_type,
-                                         min_events_per_obj_type=min_events_per_obj_type)
+                                         max_retries=max_retries)
+
+    merged_graphs = filter_out_duplicates(merged_graphs)
+    dataframes = [graph.convert_to_dataframe() for graph in merged_graphs]
+    dataframes = create_distribution(dataframes, min_traces, Dist(distribution), 0.6,
+                                     min_traces_per_obj_type, min_events_per_obj_type)
 
     # convert the partial order graphs representing the merged traces to an OCEL format including timestamps
-    dataframe = convert_to_ocel(merged_graphs, start_date=start_date,
+    dataframe = convert_to_ocel(dataframes, start_date=start_date,
                                 min_time_stepsize=min_time_stepsize,
                                 max_time_stepsize=max_time_stepsize)
 

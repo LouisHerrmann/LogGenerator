@@ -1,4 +1,4 @@
-100;3;1;1;50;30;0;1000;0;2020,1,1;1;10
+100;3;1;1;35;35;1000;0;0;0;2020,1,1;1;10
 
 # Replay parameters
 # max_trace_length: max supported trace length when simulating model
@@ -15,6 +15,7 @@
 # min_traces: minimum number of traces across all object types that should be generated
 # min_traces_per_obj_type: minimum number of traces per object type
 # min_events_per_obj_type: minimum number of events per object type
+# distribution: 0 -> UNIFORM, 1 -> BINOMIAL, 2 -> GEOMETRIC
 
 # Log generation parameters
 # start_date: start date of first event in log
