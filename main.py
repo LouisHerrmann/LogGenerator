@@ -348,7 +348,7 @@ if __name__ == '__main__':
 
     args = sys.argv
     if len(args) <= 1:
-        input_path = "input/allInputs/10.dot"
+        input_path = "input/allInputs/15.dot"
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
