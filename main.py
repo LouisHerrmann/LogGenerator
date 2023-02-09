@@ -265,8 +265,8 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
     # continue merging traces until all have been covered and all minimum number thresholds have been achieved
     while traces.get_uncovered_traces() or \
             sum([len(graph.used_traces) for graph in merged_graphs]) < min_traces or \
-            False in [num > min_traces_per_obj_type for num in num_traces_per_obj_type.values()] or \
-            False in [num > min_events_per_obj_type for num in num_events_per_obj_type.values()]:
+            False in [num >= min_traces_per_obj_type for num in num_traces_per_obj_type.values()] or \
+            False in [num >= min_events_per_obj_type for num in num_events_per_obj_type.values()]:
 
         possible_choices = traces.get_uncovered_traces()
         if not possible_choices:
