@@ -16,6 +16,7 @@ class MergedTraceGraph:
         self.last_id = 9999
         self.missing_objects = {}
         self.trace_paths = {}
+        self.used_traces = []
         self.node_associated_objects = defaultdict(lambda: set())
 
     def get_new_id(self):
@@ -110,6 +111,7 @@ class MergedTraceGraph:
                 self.graph.add_edge(node_ids[-2], node_ids[-1], trace_id=trace_id)
 
         self.trace_paths[trace_id] = node_ids
+        self.used_traces.append(trace_id)
 
     def unset_covered_traces(self, traces):
         for trace_id in self.trace_paths.keys():
@@ -262,7 +264,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
 
     # continue merging traces until all have been covered and all minimum number thresholds have been achieved
     while traces.get_uncovered_traces() or \
-            sum([len(graph.trace_paths) for graph in merged_graphs]) < min_traces or \
+            sum([len(graph.used_traces) for graph in merged_graphs]) < min_traces or \
             False in [num > min_traces_per_obj_type for num in num_traces_per_obj_type.values()] or \
             False in [num > min_events_per_obj_type for num in num_events_per_obj_type.values()]:
 
@@ -293,7 +295,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
             # in case all traces have been covered already, we simply duplicate some of existing merge graphs
             # until min trace / event thresholds have been achieved. To add some variability we only do this 80% of time
             possible_graphs = [graph for graph in merged_graphs
-                               if set(graph.trace_paths.keys()).intersection(possible_choices)]
+                               if set(graph.used_traces).intersection(possible_choices)]
             if possible_graphs:
                 # get rid of previously duplicated graphs and sort by number of unmatched events (if there are new ones)
                 if len(set(merged_graphs)) > len(sort_by_unmatched_events):
@@ -349,11 +351,11 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
 
         # ensure all merged traces are marked as covered
         for graph in merged_graphs:
-            for trace_id in graph.trace_paths.keys():
+            for trace_id in set(graph.used_traces):
                 traces.get_trace_by_id(trace_id).covered = True
 
         # keep count of number of traces and events per object type
-        for trace_id in graph.trace_paths.keys():
+        for trace_id in set(graph.used_traces):
             obj_type = traces.get_object_type_of_trace(trace_id)
             num_traces_per_obj_type[obj_type] += 1
             num_events_per_obj_type[obj_type] += len(traces.get_trace_sequence_by_id(trace_id))
@@ -444,7 +446,7 @@ if __name__ == '__main__':
 
     args = sys.argv
     if len(args) <= 1:
-        input_path = "input/example.dot"
+        input_path = "input/sameModelMoreObj/1.dot"
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
