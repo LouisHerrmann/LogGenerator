@@ -355,7 +355,7 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5, min_traces=
                 traces.get_trace_by_id(trace_id).covered = True
 
         # keep count of number of traces and events per object type
-        for trace_id in set(graph.used_traces):
+        for trace_id in graph.used_traces:
             obj_type = traces.get_object_type_of_trace(trace_id)
             num_traces_per_obj_type[obj_type] += 1
             num_events_per_obj_type[obj_type] += len(traces.get_trace_sequence_by_id(trace_id))
