@@ -218,9 +218,11 @@ def combine_object_types(traces_dict, max_iterations, max_retries=5):
     merged_graphs = []
     object_id_generator = ObjectIdGenerator(object_types)
 
+    # we want to generate a significant number of traces so that we have a good base with lots of variation before we
+    # start duplicating traces
     duplicate_threshold = 10 * math.prod([len(t) for t in traces_dict.values()])
 
-    # continue merging traces until all have been covered and all minimum number thresholds have been achieved
+    # continue merging traces until all have been covered and the minimum number threshold has been achieved
     while traces.get_uncovered_traces() or \
             sum([len(graph.used_traces) for graph in merged_graphs]) < duplicate_threshold:
 
@@ -344,11 +346,38 @@ def get_num_unmatched_events(samples, graphs_for_sampling, rest):
     return count
 
 
+def create_mo_project_required_csvs(dataframe):
+    output = "mo_project_files"
+    dataframe = dataframe.reset_index(drop=True)
+    object_types = list(set(dataframe.columns).difference(["activity", "end_time"]))
+
+    mapping_rows = []
+    events_rows = {act: [] for act in dataframe["activity"].unique()}
+    for index, row in dataframe.iterrows():
+        events_rows[row["activity"]].append({"ID": index, "Time": row["end_time"], "Type": row["activity"]})
+        for object_type in object_types:
+            if type(row[object_type]) == list:
+                for obj in row[object_type]:
+                    mapping_rows.append({"EventID": index, "EventType": row["activity"], "ObjectType": object_type, "ObjectID": obj})
+
+    pd.DataFrame(mapping_rows).to_csv(output + "/Relationships_EventToObject.csv", index=False)
+    for act, event_rows in events_rows.items():
+        pd.DataFrame(event_rows).to_csv(output + "/Event_" + act + ".csv", index=False)
+
+    for object_type in object_types:
+        objects = set()
+        for i, obj in enumerate(dataframe[object_type].dropna()):
+            for o in obj:
+                objects.add(o)
+        object_df = pd.DataFrame({"ID": list(objects), "TYPE": len(objects) * [object_type]})
+        object_df.to_csv(output + "/Object_" + object_type + ".csv", index=False)
+
+
 if __name__ == '__main__':
 
     args = sys.argv
     if len(args) <= 1:
-        input_path = "input/allInputs/15.dot"
+        input_path = "input/sameModelMoreObj/4.dot"
         output_path = "output"
         parameter_path = "parameters/config.txt"
 
@@ -419,6 +448,8 @@ if __name__ == '__main__':
                                 min_time_stepsize=min_time_stepsize,
                                 max_time_stepsize=max_time_stepsize)
 
+    create_mo_project_required_csvs(dataframe)
+
     # check number of unmatched shared activities (goal: 0)
     unmatched_events = 0
     for graph in merged_graphs:
@@ -441,25 +472,3 @@ if __name__ == '__main__':
 
     print(sum([len(df["traceid"].unique()) for df in flattened_logs.values()]), "traces in total after flattening")
     print(sum([len(df) for df in flattened_logs.values()]), "events in total after flattening")
-
-    # write output settings to textfile
-    f = open(output_path + "/output_results.txt", "w+")
-    f.write("Understandability of graph\n# nodes: " + str(len(G.nodes)) + "\n# edges: " + str(len(G.edges)))
-    f.write("\nAvg node connectivity: " + str(round(nx.average_node_connectivity(G), 3)))
-    f.write("\n# simple cycles:" + str(len(list(nx.simple_cycles(G)))))
-    XOR_nodes = len([n for n in G.nodes if nx.get_node_attributes(G, "act_name")[n] == '"BPMN_EXCLUSIVE_CHOICE"'])
-    f.write("\n# XOR nodes :" + str(XOR_nodes))
-    f.write("\nDensity: " + str(nx.density(G)))
-    f.write("\n------------------------------")
-    f.write("\nNumber of unmatched events: " + str(unmatched_events))
-    f.write("\nObject-centric events: " + str(len(dataframe)))
-    for ot, df in flattened_logs.items():
-        f.write("\n------------------------------")
-        f.write("\n# traces for " + str(ot) + ": " + str(len(df["traceid"].unique())))
-        f.write("\n# events for " + str(ot) + ": " + str(len(df)))
-    f.write("\n------------------------------")
-    num_traces = sum([len(df["traceid"].unique()) for df in flattened_logs.values()])
-    f.write("\n# traces total: " + str(num_traces))
-    num_events = sum([len(df) for df in flattened_logs.values()])
-    f.write("\n# events total: " + str(num_events))
-    f.close()
